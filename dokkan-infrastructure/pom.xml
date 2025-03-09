@@ -9,29 +9,28 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>dokkan-starter</artifactId>
+    <artifactId>dokkan-infrastructure</artifactId>
 
     <dependencies>
 
         <dependency>
             <groupId>com.hb.dokkan</groupId>
-            <artifactId>dokkan-infrastructure</artifactId>
+            <artifactId>dokkan-common</artifactId>
             <version>1.0.0-SNAPSHOT</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
         <dependency>
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-boot-starter</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
 
         <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
         </dependency>
     </dependencies>
 

@@ -81,7 +81,7 @@
         <module>dokkan-config</module>
         <module>dokkan-starter</module>
         <module>dokkan-service</module>
-        <module>dokkan-db</module>
+        <module>dokkan-infrastructure</module>
         <module>dokkan-common</module>
     </modules>
 

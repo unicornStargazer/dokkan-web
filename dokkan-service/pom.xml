@@ -12,9 +12,44 @@
     <artifactId>dokkan-service</artifactId>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <dokkan-version>1.0.0-SNAPSHOT</dokkan-version>
     </properties>
+
+    <dependencies>
+        <!--内部依赖  start-->
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-common</artifactId>
+            <version>${dokkan-version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-infrastructure</artifactId>
+            <version>${dokkan-version}</version>
+        </dependency>
+        <!--内部依赖  end-->
+
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct-processor</artifactId>
+        </dependency>
+    </dependencies>
 
 </project>
