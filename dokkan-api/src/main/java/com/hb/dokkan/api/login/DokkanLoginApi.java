@@ -29,7 +29,7 @@ public class DokkanLoginApi {
      * @param loginRequest 登录参数
      * @return DokkanResponse
      */
-    @PostMapping("")
+    @PostMapping
     public DokkanResponse login(@RequestBody LoginRequest loginRequest){
         return dokkanLoginService.login(convert.loginRequest2Dto(loginRequest));
     }

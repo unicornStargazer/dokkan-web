@@ -15,11 +15,6 @@
         <!--内部依赖  start-->
         <dependency>
             <groupId>com.hb.dokkan</groupId>
-            <artifactId>dokkan-common</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-service</artifactId>
         </dependency>
         <!--内部依赖  end-->

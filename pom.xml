@@ -14,8 +14,9 @@
         <java.version>21</java.version>
         <spring.version>3.2.5</spring.version>
         <org.mapstruct.version>1.4.1.Final</org.mapstruct.version>
-        <mybatis-plus.version>3.4.3</mybatis-plus.version>
+        <mybatis-plus.version>3.5.10.1</mybatis-plus.version>
         <fastjson.version>1.2.71</fastjson.version>
+        <hikaricp.version>6.2.1</hikaricp.version>
         <dokkan.version>1.0.0-SNAPSHOT</dokkan.version>
     </properties>
 
@@ -38,6 +39,13 @@
                 <version>${dokkan.version}</version>
             </dependency>
             <!--内部依赖 end-->
+
+            <!-- HikariCP连接池-->
+            <dependency>
+                <groupId>com.zaxxer</groupId>
+                <artifactId>HikariCP</artifactId>
+                <version>${hikaricp.version}</version>
+            </dependency>
 
             <!--springboot管理-->
             <dependency>
@@ -101,7 +109,6 @@
         <module>dokkan-starter</module>
         <module>dokkan-service</module>
         <module>dokkan-infrastructure</module>
-        <module>dokkan-common</module>
     </modules>
 
 
