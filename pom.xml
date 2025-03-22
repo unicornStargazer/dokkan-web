@@ -16,10 +16,29 @@
         <org.mapstruct.version>1.4.1.Final</org.mapstruct.version>
         <mybatis-plus.version>3.4.3</mybatis-plus.version>
         <fastjson.version>1.2.71</fastjson.version>
+        <dokkan.version>1.0.0-SNAPSHOT</dokkan.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!--内部依赖 start-->
+            <dependency>
+                <groupId>com.hb.dokkan</groupId>
+                <artifactId>dokkan-common</artifactId>
+                <version>${dokkan.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hb.dokkan</groupId>
+                <artifactId>dokkan-infrastructure</artifactId>
+                <version>${dokkan.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hb.dokkan</groupId>
+                <artifactId>dokkan-service</artifactId>
+                <version>${dokkan.version}</version>
+            </dependency>
+            <!--内部依赖 end-->
+
             <!--springboot管理-->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
