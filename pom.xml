@@ -19,6 +19,8 @@
         <hikaricp.version>6.2.1</hikaricp.version>
         <google-guava.version>32.0.1-jre</google-guava.version>
         <hutool.version>5.8.24</hutool.version>
+        <sa-tokan.version>1.41.0</sa-tokan.version>
+        <freemarker.version>2.3.34</freemarker.version>
         <dokkan.version>1.0.0-SNAPSHOT</dokkan.version>
     </properties>
 
@@ -69,8 +71,20 @@
             <!--mybatis start-->
             <dependency>
                 <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-boot-starter</artifactId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-generator</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.freemarker</groupId>
+                <artifactId>freemarker</artifactId>
+                <version>${freemarker.version}</version>
             </dependency>
             <!--mybatis end-->
 
@@ -99,7 +113,15 @@
                 <artifactId>hutool-all</artifactId>
                 <version>${hutool.version}</version>
             </dependency>
-            <!-- 通用工具类 start-->
+            <!-- 通用工具类 end-->
+
+            <!-- Sa-Token 权限认证，在线文档：https://sa-token.cc -->
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-spring-boot3-starter</artifactId>
+                <version>${sa-tokan.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
