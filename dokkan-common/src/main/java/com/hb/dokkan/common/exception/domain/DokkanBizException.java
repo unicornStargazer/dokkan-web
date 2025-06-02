@@ -13,6 +13,7 @@ public class DokkanBizException extends RuntimeException{
 
     private ResponseErrorCode error;
 
+
     public DokkanBizException(ResponseErrorCode error) {
         this.error = error;
     }

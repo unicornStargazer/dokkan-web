@@ -22,6 +22,7 @@
         <sa-tokan.version>1.41.0</sa-tokan.version>
         <freemarker.version>2.3.34</freemarker.version>
         <dokkan.version>1.0.0-SNAPSHOT</dokkan.version>
+        <jsoup.version>1.17.2</jsoup.version>
     </properties>
 
     <dependencyManagement>
@@ -112,6 +113,12 @@
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
                 <version>${hutool.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
             </dependency>
             <!-- 通用工具类 end-->
 

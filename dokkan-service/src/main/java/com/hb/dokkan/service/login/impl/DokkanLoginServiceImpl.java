@@ -7,6 +7,7 @@ import com.hb.dokkan.service.login.domain.dto.LoginRequestDTO;
 import com.hb.dokkan.service.login.domain.dto.LoginResponseDTO;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,6 +21,8 @@ public class DokkanLoginServiceImpl implements DokkanLoginService {
 
     @Resource
     private DokkanLoginRepository loginRepository;
+
+    private ApplicationContext context;
 
     /**
      * 登录接口

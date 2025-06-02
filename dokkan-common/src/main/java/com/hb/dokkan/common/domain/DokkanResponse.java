@@ -42,9 +42,9 @@ public final class DokkanResponse<T> implements Serializable {
 
         private DokkanResponse<T> response;
 
-        public DokkanResponseBuilder<T> success() {
+        public DokkanResponse<T> success() {
             this.response.setErrorInfo(ResponseErrorCode.SUCCESS);
-            return this;
+            return this.response;
         }
 
         public DokkanResponse<T> withModel(T model) {
