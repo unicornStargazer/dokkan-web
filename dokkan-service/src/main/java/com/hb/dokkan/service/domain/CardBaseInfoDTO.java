@@ -31,14 +31,17 @@ public class CardBaseInfoDTO {
      */
     private Integer rarity;
 
+    @JsonProperty("element")
+    private Integer propType;
+
     @JsonProperty("hp_max")
-    private Number hpValue;
+    private Long hpValue;
 
     @JsonProperty("atk_max")
-    private Number atkValue;
+    private Long atkValue;
 
     @JsonProperty("def_max")
-    private Number defValue;
+    private Long defValue;
 
     @JsonProperty("open_at")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd", timezone = "GMT+8")

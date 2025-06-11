@@ -49,6 +49,13 @@
         <!--数据库相关-->
 
 
+        <!--http相关-->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
+        <!--http相关-->
+
         <!--通用工具 start-->
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -83,6 +90,12 @@
             <groupId>com.alibaba</groupId>
             <artifactId>fastjson</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.github.houbb</groupId>
+            <artifactId>opencc4j</artifactId>
+        </dependency>
+
         <!--通用工具 end-->
 
     </dependencies>

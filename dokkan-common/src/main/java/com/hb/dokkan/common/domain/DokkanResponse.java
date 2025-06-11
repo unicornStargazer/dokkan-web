@@ -40,7 +40,7 @@ public final class DokkanResponse<T> implements Serializable {
     @Setter
     public static class DokkanResponseBuilder<T> {
 
-        private DokkanResponse<T> response;
+        private DokkanResponse<T> response = new DokkanResponse<>();
 
         public DokkanResponse<T> success() {
             this.response.setErrorInfo(ResponseErrorCode.SUCCESS);

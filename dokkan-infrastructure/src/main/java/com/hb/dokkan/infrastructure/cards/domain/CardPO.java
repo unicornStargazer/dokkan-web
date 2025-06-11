@@ -14,7 +14,7 @@ import java.util.Date;
  **/
 @EqualsAndHashCode(callSuper = true)
 @Data
-@TableName()
+@TableName("card")
 public class CardPO extends BasePO {
     /**
      * 卡片id
@@ -33,11 +33,11 @@ public class CardPO extends BasePO {
 
     private Integer rarity;
 
-    private Number hpValue;
+    private Long hpValue;
 
-    private Number defValue;
+    private Long defValue;
 
-    private Number atkValue;
+    private Long atkValue;
 
     private Date publishTime;
 

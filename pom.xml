@@ -23,6 +23,7 @@
         <freemarker.version>2.3.34</freemarker.version>
         <dokkan.version>1.0.0-SNAPSHOT</dokkan.version>
         <jsoup.version>1.17.2</jsoup.version>
+        <opencc4j.version>1.6.2</opencc4j.version>
     </properties>
 
     <dependencyManagement>
@@ -41,6 +42,16 @@
             <dependency>
                 <groupId>com.hb.dokkan</groupId>
                 <artifactId>dokkan-service</artifactId>
+                <version>${dokkan.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hb.dokkan</groupId>
+                <artifactId>dokkan-api</artifactId>
+                <version>${dokkan.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hb.dokkan</groupId>
+                <artifactId>dokkan-config</artifactId>
                 <version>${dokkan.version}</version>
             </dependency>
             <!--内部依赖 end-->
@@ -119,6 +130,12 @@
                 <groupId>org.jsoup</groupId>
                 <artifactId>jsoup</artifactId>
                 <version>${jsoup.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.houbb</groupId>
+                <artifactId>opencc4j</artifactId>
+                <version>${opencc4j.version}</version>
             </dependency>
             <!-- 通用工具类 end-->
 

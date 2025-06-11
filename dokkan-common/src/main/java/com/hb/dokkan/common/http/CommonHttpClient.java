@@ -3,6 +3,7 @@ package com.hb.dokkan.common.http;
 import com.hb.dokkan.common.utils.JsonUtils;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -19,6 +20,7 @@ import java.util.List;
 @Component
 public class CommonHttpClient {
     private RestTemplate restTemplate;
+
     private HttpHeaders headers;
 
     public <T> T getForEntity(String url, Class<T> responseType) {
@@ -97,10 +99,13 @@ public class CommonHttpClient {
 
     @PostConstruct
     public void init() {
+        PoolingHttpClientConnectionManager poolingHttpClientConnectionManager = new PoolingHttpClientConnectionManager();
+        poolingHttpClientConnectionManager.setMaxTotal(500);
+        poolingHttpClientConnectionManager.setDefaultMaxPerRoute(200);
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(100000); // 设置连接超时时间
-        factory.setReadTimeout(100000); // 设置读取超时时间
-        restTemplate = new RestTemplate();
+        factory.setReadTimeout(100000);// 设置读取超时时间
+        restTemplate = new RestTemplate(factory);
         headers = getHeaders();
     }
 

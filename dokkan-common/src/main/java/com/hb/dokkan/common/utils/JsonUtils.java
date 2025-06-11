@@ -1,9 +1,12 @@
 package com.hb.dokkan.common.utils;
 
+import cn.hutool.core.io.FileUtil;
+import com.alibaba.fastjson.JSON;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.CollectionType;
+import com.fasterxml.jackson.databind.type.MapType;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.hb.dokkan.common.exception.domain.DokkanSysException;
 import lombok.experimental.UtilityClass;
@@ -11,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -25,11 +30,51 @@ import java.util.Map;
 public class JsonUtils {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public static Map<String,Object> json2Map(String jsonStr) throws JsonProcessingException {
+
+    public static void writeJson2File(Object value, String filePath) {
+        if (ObjectUtils.isEmpty(value) || StringUtils.isBlank(filePath)) {
+            return;
+        }
+        File file = new File(filePath);
+        if (!FileUtil.exist(file)) {
+            FileUtil.touch(file);
+        }
+        try {
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file,value);
+        } catch (IOException e) {
+            log.error("json write file, object:{} e", JSON.toJSONString(value),e);
+            throw new DokkanSysException(e.getMessage());
+        }
+    }
+
+    public static <K,V> List<Map<K,V>> json2ListMap(String json,Class<K> keyType, Class<V> valueType) {
+        if (StringUtils.isBlank(json)) {
+            return Lists.newArrayList();
+        }
+        MapType mapType = objectMapper.getTypeFactory().constructMapType(Map.class, keyType, valueType);
+        CollectionType collectionType = objectMapper.getTypeFactory().constructCollectionType(List.class, mapType);
+        List<Map<K,V>> result;
+        try {
+            result = objectMapper.readValue(json,collectionType);
+        } catch (JsonProcessingException e) {
+            log.error("json convert fail, json:{} e",json,e);
+            throw new DokkanSysException(e.getMessage());
+        }
+        return result;
+    }
+
+    public static <K,V> Map<K,V> json2Map(String jsonStr, Class<K> keyType, Class<V> valueType) {
         if (StringUtils.isBlank(jsonStr)) {
             return Maps.newHashMap();
         }
-        Map<String, Object> result = objectMapper.readValue(jsonStr, new TypeReference<Map<String, Object>>() {});
+        MapType mapType = objectMapper.getTypeFactory().constructMapType(Map.class, keyType, valueType);
+        Map<K, V> result = null;
+        try {
+            result = objectMapper.readValue(jsonStr,mapType);
+        } catch (JsonProcessingException e) {
+            log.error("json convert fail, json:{} e",jsonStr,e);
+            throw new DokkanSysException(e.getMessage());
+        }
         return result;
     }
 

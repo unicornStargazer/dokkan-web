@@ -17,6 +17,22 @@
             <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-infrastructure</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-service</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-common</artifactId>
+        </dependency>
 
     </dependencies>
 

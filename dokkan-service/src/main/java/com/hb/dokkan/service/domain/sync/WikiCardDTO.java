@@ -36,7 +36,7 @@ public class WikiCardDTO {
     /**
      * 三围潜力值
      */
-    private List<PotentialDTO> potentials;
+    private List<PotentialDTO> potential;
 
     /**
      * 分类
