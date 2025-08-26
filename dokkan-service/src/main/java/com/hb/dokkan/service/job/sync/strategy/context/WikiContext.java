@@ -19,4 +19,6 @@ public class WikiContext {
 
     private List<WikiCardDTO> wikiCards;
 
+    private String htmlContent;
+
 }

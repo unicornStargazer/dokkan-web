@@ -46,6 +46,7 @@ public class SyncDataServiceImpl implements SyncDataService {
     public void initCard() {
         WikiInfoStrategy strategy = strategyFactory.getWikiStrategy(WikiInfoTypeEnum.CARD);
         WikiContext context = new WikiContext();
+
         strategy.execute(context);
         List<WikiCardDTO> wikiCards = context.getWikiCards();
         if (CollectionUtils.isEmpty(wikiCards)) {
@@ -58,7 +59,9 @@ public class SyncDataServiceImpl implements SyncDataService {
                 .toList();
         List<CardPO> cardPOS = convert.wikiCard2POList(cards);
         checkParam(cardPOS);
-        cardRepository.saveBatch(cardPOS);
+        cardRepository.saveBatch(cardPOS, 500);
+
+
     }
 
     private void checkParam(List<CardPO> cardPOS) {

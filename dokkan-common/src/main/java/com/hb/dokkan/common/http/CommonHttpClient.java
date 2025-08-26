@@ -1,120 +1,133 @@
 package com.hb.dokkan.common.http;
 
-import com.hb.dokkan.common.utils.JsonUtils;
-import jakarta.annotation.PostConstruct;
+import com.hb.dokkan.common.exception.domain.DokkanSysException;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.apache.commons.lang3.ObjectUtils;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriBuilder;
+import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.net.URI;
+import java.time.Duration;
+import java.util.*;
 
 @Slf4j
 @Component
 public class CommonHttpClient {
-    private RestTemplate restTemplate;
 
-    private HttpHeaders headers;
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(15);
 
-    public <T> T getForEntity(String url, Class<T> responseType) {
-        ResponseEntity<String> response = null;
+    @Resource(name = "dokkanWikiWebClient")
+    private WebClient wikiClient;
+
+    @Resource(name = "dokkanInfoWebClient")
+    private WebClient infoClient;
+
+    /**
+     * get请求 返回单个对象
+     */
+    public <T> Optional<T> getForObject(String uri, Class<T> responseType, Map<String, String> uriVariables) {
+
         try {
-            response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    new HttpEntity<>(null,headers),
-                    String.class
-            );
-        } catch (RestClientException e) {
-            log.error("请求失败，url:{}, error:{}",url,e.getMessage());
-            return null;
+            T result = execute(wikiClient.get()
+                    .uri(uriBuilder -> buildUri(uri, uriVariables, uriBuilder))
+                    .retrieve(), responseType);
+            return Optional.ofNullable(result);
+
+        }catch (Exception e) {
+            log.error("getForObject error! uri:{} exception:{}",uri, e.getMessage());
+            return Optional.empty();
         }
-        if (response.getStatusCode().isError()){
-            return null;
-        }
-        String body = response.getBody();
-        if (body == null) {
-            return null;
-        }
-        return JsonUtils.json2Object(body,responseType);
     }
 
+    /**
+     * get请求 返回单个对象
+     */
+    public <T> Optional<T> getForObject(String uri, Class<T> responseType) {
 
-    public <T> List<T> getForList(String url, Class<T> responseType) {
-        ResponseEntity<String> responseEntity = null;
         try {
-            responseEntity = restTemplate.exchange(
-                    url, HttpMethod.GET,
-                    new HttpEntity<>(null, headers),
-                    String.class);
-        } catch (RestClientException e) {
-            log.error("请求失败，url:{}, error:{}",url,e.getMessage());
-            return new ArrayList<>();
+            T result = execute(infoClient.get()
+                    .uri(uriBuilder -> buildUri(uri,null , uriBuilder))
+                    .retrieve(), responseType);
+            return Optional.ofNullable(result);
+
+        }catch (Exception e) {
+            log.error("getForObject error! uri:{} exception:{}",uri, e.getMessage());
+            return Optional.empty();
         }
-        String response = responseEntity.getBody();
-        List<T> list = JsonUtils.json2List(response, responseType);
-        return list;
     }
-    public <T,V> List<T> postForList(String url, Class<T> responseType,V request) {
-        ResponseEntity<String> responseEntity = null;
+
+    /**
+     * get请求 返回列表
+     */
+    public <T> List<T> getForList(String uri, Class<T> elementType, Map<String, String> uriVariables) {
+
         try {
-            responseEntity = restTemplate.exchange(
-                    url,
-                    HttpMethod.POST,
-                    new HttpEntity<>(request,headers),
-                    String.class
-            );
-        } catch (RestClientException e) {
-            log.error("请求失败，url:{}, error:{}",url,e.getMessage());
-            return new ArrayList<>();
+            List<T> list = execute(wikiClient.get()
+                    .uri(uriBuilder -> buildUri(uri, uriVariables, uriBuilder))
+                    .retrieve()
+                    .bodyToFlux(elementType)
+                    .collectList());
+            return Objects.nonNull(list) ? list : Collections.emptyList();
+        }catch (Exception e) {
+            log.error("getForList error! uri:{} exception:{}",uri, e.getMessage());
+            return Collections.emptyList();
         }
-        String response = responseEntity.getBody();
-        List<T> list = JsonUtils.json2List(response, responseType);
-        return list;
     }
 
-    public <T,V> T postForEntity(String url, Class<T> responseType, V request) {
-        ResponseEntity<String> response = null;
+    /**
+     * post请求 返回单个对象
+     */
+    public <T, R> Optional<T> postForObject(String uri, R requestBody, Class<T> responseType, Map<String, String> uriVariables) {
+
         try {
-            response = restTemplate.exchange(
-                    url,
-                    HttpMethod.POST,
-                    new HttpEntity<>(request,headers),
-                    String.class
-            );
-        } catch (RestClientException e) {
-            log.error("请求失败，url:{}, error:{}",url,e.getMessage());
-            return null;
+            T result = execute(wikiClient.post()
+                    .uri(uriBuilder -> buildUri(uri, uriVariables, uriBuilder))
+                    .bodyValue(requestBody)
+                    .retrieve(), responseType);
+            return Optional.ofNullable(result);
+        }catch (Exception e) {
+            log.error("postForObject error! uri:{} exception:{}",uri, e.getMessage());
+            return Optional.empty();
         }
-        String body = response.getBody();
-        return JsonUtils.json2Object(body,responseType);
     }
 
-    @PostConstruct
-    public void init() {
-        PoolingHttpClientConnectionManager poolingHttpClientConnectionManager = new PoolingHttpClientConnectionManager();
-        poolingHttpClientConnectionManager.setMaxTotal(500);
-        poolingHttpClientConnectionManager.setDefaultMaxPerRoute(200);
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(100000); // 设置连接超时时间
-        factory.setReadTimeout(100000);// 设置读取超时时间
-        restTemplate = new RestTemplate(factory);
-        headers = getHeaders();
+    /**
+     * 构建URI
+     */
+    private URI buildUri(String uri, Map<String, String> uriVariables, UriBuilder uriBuilder) {
+        if (ObjectUtils.isNotEmpty(uriVariables)) {
+            return uriBuilder.path(uri).build(uriVariables);
+        }else {
+            return uriBuilder.path(uri).build();
+        }
     }
 
-    private static HttpHeaders getHeaders(){
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("User-Agent", "PostmanRuntime/7.42.0");
-        headers.set("Connection", "keep-alive");
-        headers.set("Content-Type","application/json");
-        headers.set("Accept","application/json");
-        return headers;
+
+    /**
+     * 实际执行方法
+     */
+    private <T> T execute(WebClient.ResponseSpec responseSpec, Class<T> responseType) {
+        return responseSpec
+                .onStatus(HttpStatusCode::is4xxClientError, resp ->
+                        Mono.error(new DokkanSysException("客户端错误: " + resp.statusCode() )))
+                .onStatus(HttpStatusCode::is5xxServerError, resp ->
+                        Mono.error(new DokkanSysException("服务器错误: " + resp.statusCode() )))
+                .bodyToMono(responseType)
+                .doOnError(ex -> log.error("Http请求失败:{}", ex.getMessage()))
+                .block(DEFAULT_TIMEOUT);
     }
+
+    /**
+     * 实际执行方法
+     */
+    private <T> T execute(Mono<T> mono) {
+        return mono
+                .doOnError(ex -> log.error("Http请求失败:{}", ex.getMessage()))
+                .block(DEFAULT_TIMEOUT);
+    }
+
 }

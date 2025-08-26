@@ -17,6 +17,11 @@
             <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-infrastructure</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-config</artifactId>
+        </dependency>
         <!--内部依赖  end-->
 
         <!-- 解析html start -->

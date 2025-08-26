@@ -12,11 +12,13 @@ import lombok.Getter;
 @Getter
 public enum SyncCardUrlEnum {
 
-    WIKI_LINK("https://zh.dokkan.wiki/api/links","链接url"),
+    WIKI_INFO("/cards",""),
 
-    WIKI_CATEGORY("https://zh.dokkan.wiki/api/categories","分类url"),
+    WIKI_LINK("/api/links","链接url"),
 
-    WIKI_CARDS("https://zh.dokkan.wiki/api/cards/","卡片url"),
+    WIKI_CATEGORY("/api/categories","分类url"),
+
+    WIKI_CARDS("/api/cards/","卡片url"),
 
     ;
 

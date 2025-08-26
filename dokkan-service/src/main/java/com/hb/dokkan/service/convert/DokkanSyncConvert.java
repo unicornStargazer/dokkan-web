@@ -27,7 +27,8 @@ public interface DokkanSyncConvert {
             @Mapping(target = "cardId",source = "id"),
             @Mapping(target = "cardName",source = "name"),
             @Mapping(target = "type", qualifiedByName = "getType",source = "cardInfo"),
-            @Mapping(target = "propType", qualifiedByName = "getPropType",source = "cardInfo")
+            @Mapping(target = "propType", qualifiedByName = "getPropType",source = "cardInfo"),
+            @Mapping(target = "id", ignore = true)
     })
     CardPO wikiCard2PO(CardBaseInfoDTO cardInfo);
 

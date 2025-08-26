@@ -23,6 +23,10 @@ public class DokkanBizException extends RuntimeException{
         this.error = error;
     }
 
+    public DokkanBizException(String msg){
+        super(msg);
+    }
+
     @Override
     public String toString() {
         return String.format("[%s]%s",error.getErrorCode(),error.getErrorMsg());

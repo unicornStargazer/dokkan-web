@@ -2,8 +2,11 @@ package com.hb.dokkan.service.job.sync.strategy.strategies;
 
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Lists;
+import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.common.utils.TranslationUtils;
+import com.hb.dokkan.config.http.HttpPoolProperties;
+import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.service.domain.CardBaseInfoDTO;
 import com.hb.dokkan.service.domain.sync.AwakeningInfoDTO;
 import com.hb.dokkan.service.domain.sync.SyncCardDTO;
@@ -17,14 +20,13 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.springframework.core.task.VirtualThreadTaskExecutor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
-import java.io.File;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
@@ -44,16 +46,19 @@ public class WikiCardInfoStrategy implements WikiInfoStrategy {
     @Resource
     private WikiFacade wikiFacade;
 
-    private File htmlFile;
+    @Resource
+    private HttpPoolProperties httpPoolProperties;
 
     @Resource
-    private VirtualThreadTaskExecutor dokkanVirtualThreadExecutor;
+    private DokkanThreadPoolExecutor dokkanThreadPoolExecutor;
+
+    private Semaphore semaphore;
 
     private static final String filePath = "E:/IDEA Project/dokkan-web/dokkan-starter/src/main/resources/card/cards.json";
 
     @PostConstruct
     public void preLoad() {
-        htmlFile = new File("C:/Users/lenovo/Desktop/html/cards.html");
+        semaphore = new Semaphore(httpPoolProperties.getConcurrency().getSemaphorePermits());
     }
 
 
@@ -79,11 +84,12 @@ public class WikiCardInfoStrategy implements WikiInfoStrategy {
     }
 
     private List<WikiCardDTO> getWikiCards() {
-        if (!htmlFile.exists()) {
-            throw new RuntimeException("html file is null");
-        }
         try {
-            Document doc = Jsoup.parse(htmlFile, "utf-8");
+            String html = wikiFacade.getWikiHtml();
+            if (StringUtils.isBlank(html)) {
+                throw new DokkanBizException("html 获取失败");
+            }
+            Document doc = Jsoup.parse(html, "utf-8");
             Element cardsElement = doc.selectFirst("cards");
             if (Objects.isNull(cardsElement)) {
                 return Lists.newArrayList();
@@ -94,44 +100,57 @@ public class WikiCardInfoStrategy implements WikiInfoStrategy {
                     .filter(card -> card.getId() < 5000021 && card.getRarity() > 3)
                     .map(SyncCardDTO::getId)
                     .toList();
-            List<CompletableFuture<WikiCardDTO>> completableFutures = cardIds.stream()
-                    // CompletableFuture进行并行编排指定自定义的线程池
-                    .map(cardId -> CompletableFuture
-                            .supplyAsync(() -> {
-                                final Semaphore semaphore = new Semaphore(50);
-                                try {
-                                    semaphore.acquire();
-                                    WikiCardDTO wikiCardDTO = wikiFacade.getWikiCard(String.valueOf(cardId));
-                                    if (filterCard(wikiCardDTO)) {
-                                        WikiCardDTO insertCard = TranslationUtils.toSimpleChinese(wikiCardDTO);
-                                        // 日志可以保留，但要注意日志本身也可能成为瓶颈
-                                        log.info("，card:{}", JSON.toJSONString(Objects.requireNonNull(insertCard).getCard()));
-                                        return insertCard;
+
+            log.info("开始获取卡片信息， 总数量:{}", cardIds.size());
+
+            HttpPoolProperties.Concurrency concurrencyConfig = httpPoolProperties.getConcurrency();
+            int batchSize = concurrencyConfig.getBatchSize();
+
+            List<WikiCardDTO> allResult = Lists.newArrayList();
+
+            for (int i = 0; i < cardIds.size(); i+= batchSize) {
+                int endIndex = Math.min(i + batchSize, cardIds.size());
+
+                List<Long> batchCardIds = cardIds.subList(i, endIndex);
+
+                log.info("处理器:{} 批, 数量:{}", (i / batchSize + 1), batchCardIds.size());
+
+                List<CompletableFuture<WikiCardDTO>> completableFutures = cardIds.stream()
+                        // CompletableFuture进行并行编排指定自定义的线程池
+                        .map(cardId -> CompletableFuture
+                                .supplyAsync(() -> {
+                                    try{
+                                        semaphore.acquire();
+                                        WikiCardDTO wikiCardDTO = wikiFacade.getWikiCard(String.valueOf(cardId));
+                                        if (filterCard(wikiCardDTO)) {
+                                            WikiCardDTO insertCard = TranslationUtils.toSimpleChinese(wikiCardDTO);
+                                            // 日志可以保留，但要注意日志本身也可能成为瓶颈
+                                            log.info("card:{}", JSON.toJSONString(Objects.requireNonNull(insertCard).getCard()));
+                                            return insertCard;
+                                        }
+                                        return null;
+                                    }catch (Exception e) {
+                                        log.error("获取卡片异常 cardId:{}", cardId, e);
+                                        return null;
+                                    }finally {
+                                        semaphore.release();
                                     }
-                                    return null;
-                                } catch (InterruptedException e) {
-                                    throw new RuntimeException(e);
-                                }finally {
-                                    semaphore.release();
-                                }
-                            }, dokkanVirtualThreadExecutor)
-                            .handle((result, ex) -> {
-                                if (ex != null) {
-                                    // 如果任务执行过程中发生任何异常（如网络超时）
-                                    log.error("获取卡片信息时发生异常, cardId: {}", cardId, ex);
-                                    return null; // 将异常转换为null结果，避免中断整个流程
-                                }
-                                if (result != null) {
-                                    log.info("请求成功, cardId: {}", cardId);
-                                }
-                                return result;
-                            }))
-                    .toList();
-            return CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[0]))
-                    .thenApply(v -> completableFutures.stream().map(CompletableFuture::join).filter(Objects::nonNull).toList())
-                    .join();
+                                }, dokkanThreadPoolExecutor))
+                        .toList();
+                List<WikiCardDTO> batchResult = CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[0]))
+                        .thenApply(v -> completableFutures.stream()
+                                .map(CompletableFuture::join)
+                                .filter(Objects::nonNull)
+                                .toList())
+                        .join();
+                allResult.addAll(batchResult);
+                log.info("第 {} 批处理完成 获取到{}个有效卡片", (i / batchSize + 1), batchCardIds.size());
+
+            }
+            log.info("获取卡片成功， 总共获取{}个卡片", allResult.size());
+            return allResult;
         } catch (Exception e) {
-            log.error("WikiCardInfoStrategy#getWikiCards error");
+            log.error("WikiCardInfoStrategy#getWikiCards error",e);
             return Lists.newArrayList();
         }
     }
