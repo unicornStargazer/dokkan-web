@@ -1,6 +1,6 @@
 package com.hb.dokkan.service.job.sync.strategy.context;
 
-import com.hb.dokkan.service.domain.sync.WikiCardDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
 import lombok.*;
 
 import java.util.List;

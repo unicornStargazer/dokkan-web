@@ -6,7 +6,7 @@ import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.common.http.CommonHttpClient;
 import com.hb.dokkan.common.http.RetryTemplate;
 import com.hb.dokkan.config.http.HttpPoolProperties;
-import com.hb.dokkan.service.domain.sync.WikiCardDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
 import com.hb.dokkan.service.enums.SyncCardUrlEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;

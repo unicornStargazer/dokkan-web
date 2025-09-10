@@ -1,8 +1,8 @@
 package com.hb.dokkan.service.convert;
 
-import com.alibaba.fastjson.JSON;
 import com.hb.dokkan.infrastructure.cards.domain.CardPO;
-import com.hb.dokkan.service.domain.CardBaseInfoDTO;
+import com.hb.dokkan.service.domain.dto.CardBaseInfoDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
 import com.hb.dokkan.service.enums.CardPropTypeEnum;
 import org.mapstruct.*;
 
@@ -18,7 +18,7 @@ import java.util.Objects;
 public interface DokkanSyncConvert {
 
 
-    List<CardPO> wikiCard2POList(List<CardBaseInfoDTO> wikiCards);
+    List<CardPO> wikiCard2POList(List<WikiCardBaseInfoDTO> wikiCards);
 
 
     @Mappings({
@@ -30,29 +30,16 @@ public interface DokkanSyncConvert {
             @Mapping(target = "propType", qualifiedByName = "getPropType",source = "cardInfo"),
             @Mapping(target = "id", ignore = true)
     })
-    CardPO wikiCard2PO(CardBaseInfoDTO cardInfo);
+    CardPO wikiCard2PO(WikiCardBaseInfoDTO cardInfo);
 
-    @Named("buildAttributes")
-    default String buildAttributes(CardBaseInfoDTO dto) {
-        CardBaseInfoDTO baseInfoDTO = CardBaseInfoDTO.builder()
-                .carnivalFlag(dto.getCarnivalFlag())
-                .freeCardFlag(dto.getFreeCardFlag())
-                .dokkanFesFlag(dto.getDokkanFesFlag())
-                .leaderSkill(dto.getLeaderSkill())
-                .passiveSkillDesc(dto.getPassiveSkillDesc())
-                .build();
-        return JSON.toJSONString(baseInfoDTO);
-    }
 
-    @Named("getType")
-    default Integer getType(CardBaseInfoDTO cardBaseInfoDTO) {
-        Integer type = cardBaseInfoDTO.getPropType();
-        return CardPropTypeEnum.getProp(type);
-    }
 
-    @Named("getPropType")
-    default String getPropType(CardBaseInfoDTO cardBaseInfoDTO) {
-        Integer type = cardBaseInfoDTO.getPropType();
-        return Objects.requireNonNull(CardPropTypeEnum.getCardPropEnumByType(type)).getDescription();
-    }
+    @Mappings({
+            @Mapping(source = "openAt",target = "publishTime"),
+            @Mapping(target = "cardId",source = "id"),
+            @Mapping(target = "cardName",source = "name"),
+            @Mapping(target = "type", qualifiedByName = "getType",source = "cardInfo"),
+            @Mapping(target = "propType", qualifiedByName = "getPropType",source = "cardInfo"),
+    })
+    CardBaseInfoDTO wikiCard2Dto(WikiCardBaseInfoDTO wikiCard);
 }

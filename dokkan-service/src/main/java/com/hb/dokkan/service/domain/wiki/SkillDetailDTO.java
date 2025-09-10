@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.domain;
+package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;

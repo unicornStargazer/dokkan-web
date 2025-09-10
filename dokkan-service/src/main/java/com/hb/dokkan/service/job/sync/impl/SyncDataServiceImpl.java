@@ -6,8 +6,8 @@ import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.infrastructure.cards.DokkanCardRepository;
 import com.hb.dokkan.infrastructure.cards.domain.CardPO;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
-import com.hb.dokkan.service.domain.CardBaseInfoDTO;
-import com.hb.dokkan.service.domain.sync.WikiCardDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
 import com.hb.dokkan.service.job.sync.SyncDataService;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
@@ -54,7 +54,7 @@ public class SyncDataServiceImpl implements SyncDataService {
             return;
         }
 
-        List<CardBaseInfoDTO> cards = wikiCards.stream()
+        List<WikiCardBaseInfoDTO> cards = wikiCards.stream()
                 .map(WikiCardDTO::getCard)
                 .toList();
         List<CardPO> cardPOS = convert.wikiCard2POList(cards);

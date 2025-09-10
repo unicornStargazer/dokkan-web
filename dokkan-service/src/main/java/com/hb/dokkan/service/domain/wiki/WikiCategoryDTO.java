@@ -1,13 +1,12 @@
-package com.hb.dokkan.service.domain.sync;
+package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 /**
  * @Description xxxxx
  * @Author stargazer
- * @Date 2025/6/2 16:22
+ * @Date 2025/6/2 16:20
  **/
 @AllArgsConstructor
 @Getter
@@ -15,13 +14,15 @@ import lombok.*;
 @Builder
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class WikiLinkDTO {
+public class WikiCategoryDTO {
 
+    /**
+     * 分类id
+     */
     private Long id;
 
+    /**
+     * 分类名称
+     */
     private String name;
-
-    @JsonProperty("level10_description")
-    private String desc;
-
 }

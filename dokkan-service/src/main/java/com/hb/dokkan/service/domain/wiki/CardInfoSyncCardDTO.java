@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.domain.sync;
+package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -7,7 +7,7 @@ import lombok.*;
 import java.util.List;
 
 /**
- * @Description xxxxx
+ * @Description card-info 网站模型
  * @Author stargazer
  * @Date 2025/6/2 1:06
  **/
@@ -17,7 +17,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class SyncCardDTO {
+public class CardInfoSyncCardDTO {
 
     @JsonProperty("id")
     private long id; // ID 通常用 long 更安全

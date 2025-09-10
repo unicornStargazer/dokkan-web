@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.job.sync.strategy.strategies;
+package com.hb.dokkan.service.job.sync.strategy;
 
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Lists;
@@ -7,41 +7,34 @@ import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.common.utils.TranslationUtils;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
-import com.hb.dokkan.service.domain.CardBaseInfoDTO;
-import com.hb.dokkan.service.domain.sync.AwakeningInfoDTO;
-import com.hb.dokkan.service.domain.sync.SyncCardDTO;
-import com.hb.dokkan.service.domain.sync.WikiCardDTO;
+import com.hb.dokkan.service.domain.wiki.AwakeningInfoDTO;
+import com.hb.dokkan.service.domain.wiki.CardInfoSyncCardDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
 import com.hb.dokkan.service.enums.CardRarityEnum;
 import com.hb.dokkan.service.facade.WikiFacade;
-import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
-import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
-import java.net.URL;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 
 /**
- * @Description xxxxx
+ * @Description 卡片wiki
  * @Author stargazer
- * @Date 2025/6/2 21:05
+ * @Date 2025/9/10 22:06
  **/
-@Component
 @Slf4j
-public class WikiCardInfoStrategy implements WikiInfoStrategy {
+public abstract class AbstractWikiCardStrategy<T> implements WikiInfoStrategy {
 
     @Resource
     private WikiFacade wikiFacade;
@@ -54,34 +47,16 @@ public class WikiCardInfoStrategy implements WikiInfoStrategy {
 
     private Semaphore semaphore;
 
-    private static final String filePath = "E:/IDEA Project/dokkan-web/dokkan-starter/src/main/resources/card/cards.json";
 
-    @PostConstruct
-    public void preLoad() {
-        semaphore = new Semaphore(httpPoolProperties.getConcurrency().getSemaphorePermits());
-    }
-
-
-    @Override
-    public boolean isMatched(WikiInfoTypeEnum type) {
-        return WikiInfoTypeEnum.CARD.equals(type);
-    }
-
-    @SneakyThrows
     @Override
     public void execute(WikiContext context) {
-        URL url = this.getClass().getResource("card/cards.json");
-        if (Objects.nonNull(url)) {
-            String json = (String) url.getContent();
-            List<WikiCardDTO> wikiCardDTOS = JsonUtils.json2List(json, WikiCardDTO.class);
-            context.setWikiCards(wikiCardDTOS);
-            return;
-        }
-        List<WikiCardDTO> wikiCards = getWikiCards();
+        List<WikiCardDTO> wikiCards = this.getWikiCards();
         context.setWikiCards(wikiCards);
-        List<Map<String, Object>> jsonList = JsonUtils.json2ListMap(JSON.toJSONString(wikiCards), String.class, Object.class);
-        JsonUtils.writeJson2File(jsonList,filePath);
+        List<T> dataList = buildData(context);
+        context.setData(dataList);
     }
+
+    protected abstract List<T> buildData(WikiContext context);
 
     private List<WikiCardDTO> getWikiCards() {
         try {
@@ -95,12 +70,11 @@ public class WikiCardInfoStrategy implements WikiInfoStrategy {
                 return Lists.newArrayList();
             }
             String cardsJson = cardsElement.attr("v-bind:cardsjson");
-            List<SyncCardDTO> syncCardsJobs = JsonUtils.json2List(cardsJson, SyncCardDTO.class);
+            List<CardInfoSyncCardDTO> syncCardsJobs = JsonUtils.json2List(cardsJson, CardInfoSyncCardDTO.class);
             List<Long> cardIds = syncCardsJobs.stream()
                     .filter(card -> card.getId() < 5000021 && card.getRarity() > 3)
-                    .map(SyncCardDTO::getId)
+                    .map(CardInfoSyncCardDTO::getId)
                     .toList();
-
             log.info("开始获取卡片信息， 总数量:{}", cardIds.size());
 
             HttpPoolProperties.Concurrency concurrencyConfig = httpPoolProperties.getConcurrency();
@@ -149,6 +123,8 @@ public class WikiCardInfoStrategy implements WikiInfoStrategy {
             }
             log.info("获取卡片成功， 总共获取{}个卡片", allResult.size());
             return allResult;
+
+
         } catch (Exception e) {
             log.error("WikiCardInfoStrategy#getWikiCards error",e);
             return Lists.newArrayList();
@@ -160,11 +136,11 @@ public class WikiCardInfoStrategy implements WikiInfoStrategy {
             return false;
         }
 
-        CardBaseInfoDTO cardDetail = card.getCard();
-        if (specialCardUnAccess(cardDetail)) {
+        WikiCardBaseInfoDTO cardDetail = card.getCard();
+        if (cardDetail.getId() == 4017791 || cardDetail.getId() == 4030811) {
             return false;
         }
-        if (specialCardAccess(cardDetail)) {
+        if (cardDetail.getId() == 1003310) {
             return true;
         }
         boolean rarityFlag = Boolean.TRUE.equals(cardDetail.getDokkanFesFlag()) || Boolean.TRUE.equals(cardDetail.getCarnivalFlag())
@@ -175,11 +151,9 @@ public class WikiCardInfoStrategy implements WikiInfoStrategy {
         return awakenFlag && rarityFlag;
     }
 
-    private boolean specialCardAccess(CardBaseInfoDTO cardDetail) {
-        return cardDetail.getId() == 1003310;
+    @PostConstruct
+    public void preLoad() {
+        semaphore = new Semaphore(httpPoolProperties.getConcurrency().getSemaphorePermits());
     }
 
-    private boolean specialCardUnAccess(CardBaseInfoDTO cardDetail) {
-        return cardDetail.getId() == 4017791 || cardDetail.getId() == 4030811;
-    }
 }

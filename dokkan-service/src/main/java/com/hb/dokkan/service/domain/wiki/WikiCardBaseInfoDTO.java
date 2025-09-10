@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.domain;
+package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -18,7 +18,7 @@ import java.util.Date;
 @Builder
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class CardBaseInfoDTO {
+public class WikiCardBaseInfoDTO {
 
     private Long id;
 

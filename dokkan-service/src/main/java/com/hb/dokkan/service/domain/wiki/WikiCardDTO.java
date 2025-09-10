@@ -1,11 +1,7 @@
-package com.hb.dokkan.service.domain.sync;
+package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.hb.dokkan.service.domain.CardBaseInfoDTO;
-import com.hb.dokkan.service.domain.CardTransformationDTO;
-import com.hb.dokkan.service.domain.PotentialDTO;
-import com.hb.dokkan.service.domain.SkillDetailDTO;
 import lombok.*;
 
 import java.util.List;
@@ -25,13 +21,13 @@ public class WikiCardDTO {
     /**
      * 卡的基础信息
      */
-    private CardBaseInfoDTO card;
+    private WikiCardBaseInfoDTO card;
 
     /**
      * 卡的极限及超极限信息
      */
     @JsonProperty("optimal_awakening_growths")
-    private List<CardBaseInfoDTO> ezaCardInfos;
+    private List<WikiCardBaseInfoDTO> ezaCardInfos;
 
     /**
      * 三围潜力值
