@@ -1,29 +1,34 @@
 package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.*;
+import lombok.Data;
 
+import java.io.Serializable;
 import java.util.Date;
 
 /**
- * @Description 卡牌基础信息
+ * @Description 极限数据
  * @Author stargazer
- * @Date 2025/6/2 16:06
+ * @Date 2025/9/13 23:19
  **/
-@AllArgsConstructor
-@Getter
-@Setter
-@Builder
-@NoArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class WikiCardBaseInfoDTO {
+@Data
+public class WikiEzaCardDTO implements Serializable {
+    private static final long serialVersionUID = -1078023414258713975L;
 
     /**
      * 卡牌id
      */
     private Long id;
+
+    /**
+     * 极限阶段
+     */
+    private Integer step;
+    /**
+     * 最大等级
+     */
+    private Integer lvMax;
 
     /**
      * 卡牌名称
@@ -75,16 +80,20 @@ public class WikiCardBaseInfoDTO {
     /**
      * 队长技id
      */
-    private Long leaderSkillSetId;
+    private Integer leaderSkillId;
+    /**
+     * 队长技name
+     */
+    private String leaderSkillName;
     /**
      * 队长技
      */
+    @JsonProperty("leader_skill_description")
     private String leaderSkill;
-
     /**
      * 被动id
      */
-    private Long passiveSkillSetId;
+    private Integer passiveSkillId;
 
     /**
      * 被动名称
@@ -95,28 +104,6 @@ public class WikiCardBaseInfoDTO {
      */
     @JsonProperty("passive_skill_itemized_desc")
     private String passiveSkillDesc;
-
-    /**
-     * 主动技id
-     */
-    private Integer activeSkillId;
-    /**
-     * 主动技名称
-     */
-    private String activeSkillName;
-    /**
-     * 主动技效果
-     */
-    private String activeSkillEffect;
-    /**
-     * 主动技条件
-     */
-    private String activeSkillCondition;
-
-    /**
-     * skillLevelMax
-     */
-    private Integer skillLevelMax;
     /**
      * 免费标志
      */
@@ -132,5 +119,4 @@ public class WikiCardBaseInfoDTO {
      */
     @JsonProperty("is_carnival_only")
     private Boolean carnivalFlag;
-
 }

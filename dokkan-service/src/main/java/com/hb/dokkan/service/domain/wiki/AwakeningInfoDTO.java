@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 /**
- * @Description xxxxx
+ * @Description 觉醒卡牌
  * @Author stargazer
  * @Date 2025/6/2 18:27
  **/
@@ -17,8 +17,14 @@ import lombok.*;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AwakeningInfoDTO {
 
+    /**
+     * 卡牌id
+     */
     private Long cardId;
 
+    /**
+     * dk后卡牌id
+     */
     @JsonProperty("awaked_card_id")
     private Long awakedCardId;
 

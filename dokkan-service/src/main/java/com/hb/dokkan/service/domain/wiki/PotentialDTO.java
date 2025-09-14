@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 /**
- * @Description xxxxx
+ * @Description 潜能
  * @Author stargazer
  * @Date 2025/6/2 16:17
  **/
@@ -16,12 +16,22 @@ import lombok.*;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PotentialDTO {
 
+    /**
+     *
+     */
     private Integer order;
 
+    /**
+     * 生命值
+     */
     private Number hp;
-
+    /**
+     * 攻击值
+     */
     private Number atk;
-
+    /**
+     * 防御值
+     */
     private Number def;
 
 }

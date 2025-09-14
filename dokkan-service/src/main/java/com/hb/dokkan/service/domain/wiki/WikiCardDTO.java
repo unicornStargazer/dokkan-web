@@ -7,7 +7,7 @@ import lombok.*;
 import java.util.List;
 
 /**
- * @Description xxxxx
+ * @Description 卡牌聚合信息
  * @Author stargazer
  * @Date 2025/6/2 2:16
  **/
@@ -27,7 +27,7 @@ public class WikiCardDTO {
      * 卡的极限及超极限信息
      */
     @JsonProperty("optimal_awakening_growths")
-    private List<WikiCardBaseInfoDTO> ezaCardInfos;
+    private List<WikiEzaCardDTO> ezaCardInfos;
 
     /**
      * 三围潜力值
@@ -42,7 +42,7 @@ public class WikiCardDTO {
     /**
      * 必杀
      */
-    private List<SkillDetailDTO> specials;
+    private List<SpecialAttackDTO> specials;
 
     /**
      * 觉醒相关信息
@@ -64,11 +64,11 @@ public class WikiCardDTO {
      * 下拉释放
      */
     @JsonProperty("finish_skills")
-    private List<SkillDetailDTO> finishSkills;
+    private List<WikiSkillDTO> finishSkills;
 
     /**
      * 下拉待定
      */
     @JsonProperty("standby_skills")
-    private List<SkillDetailDTO> standbySkills;
+    private List<WikiSkillDTO> standbySkills;
 }

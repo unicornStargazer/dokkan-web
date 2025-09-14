@@ -47,13 +47,13 @@ public class SyncDataServiceImpl implements SyncDataService {
         WikiInfoStrategy strategy = strategyFactory.getWikiStrategy(WikiInfoTypeEnum.CARD);
         WikiContext context = new WikiContext();
 
+
         strategy.execute(context);
         List<WikiCardDTO> wikiCards = context.getWikiCards();
         if (CollectionUtils.isEmpty(wikiCards)) {
             log.error("初始化失败，获取卡片为空");
             return;
         }
-
         List<WikiCardBaseInfoDTO> cards = wikiCards.stream()
                 .map(WikiCardDTO::getCard)
                 .toList();

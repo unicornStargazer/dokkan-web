@@ -10,7 +10,7 @@ import java.io.Serializable;
 import java.util.Date;
 
 /**
- * @Description xxxxx
+ * @Description 数据模型基类
  * @Author stargazer
  * @Date 2025/3/9 19:38
  **/

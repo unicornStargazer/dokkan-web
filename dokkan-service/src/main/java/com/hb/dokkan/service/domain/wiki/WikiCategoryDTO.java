@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 /**
- * @Description xxxxx
+ * @Description 分类信息
  * @Author stargazer
  * @Date 2025/6/2 16:20
  **/
