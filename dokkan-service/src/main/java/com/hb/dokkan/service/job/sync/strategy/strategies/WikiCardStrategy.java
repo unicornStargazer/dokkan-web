@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.job.sync.strategy;
+package com.hb.dokkan.service.job.sync.strategy.strategies;
 
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Lists;
@@ -7,13 +7,17 @@ import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.common.utils.TranslationUtils;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
+import com.hb.dokkan.service.domain.bo.WikiCardBO;
 import com.hb.dokkan.service.domain.wiki.AwakeningInfoDTO;
 import com.hb.dokkan.service.domain.wiki.CardInfoSyncCardDTO;
 import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
 import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
 import com.hb.dokkan.service.enums.CardRarityEnum;
 import com.hb.dokkan.service.facade.WikiFacade;
+import com.hb.dokkan.service.helper.WikiCardHelper;
+import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
+import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
 import java.util.List;
@@ -34,7 +39,8 @@ import java.util.concurrent.Semaphore;
  * @Date 2025/9/10 22:06
  **/
 @Slf4j
-public abstract class AbstractWikiCardStrategy<T> implements WikiInfoStrategy {
+@Component
+public class WikiCardStrategy implements WikiInfoStrategy {
 
     @Resource
     private WikiFacade wikiFacade;
@@ -47,16 +53,26 @@ public abstract class AbstractWikiCardStrategy<T> implements WikiInfoStrategy {
 
     private Semaphore semaphore;
 
+    @Resource
+    private WikiCardHelper wikiCardHelper;
+
+
+    /**
+     * 是否匹配
+     */
+    @Override
+    public boolean isMatched(WikiInfoTypeEnum type) {
+        return WikiInfoTypeEnum.CARD.equals(type);
+    }
 
     @Override
     public void execute(WikiContext context) {
         List<WikiCardDTO> wikiCards = this.getWikiCards();
+        WikiCardBO cardBO = new WikiCardBO();
         context.setWikiCards(wikiCards);
-        List<T> dataList = buildData(context);
-        context.setData(dataList);
+        context.setCardData(cardBO);
+        wikiCardHelper.buildData(cardBO, context);
     }
-
-    protected abstract List<T> buildData(WikiContext context);
 
     private List<WikiCardDTO> getWikiCards() {
         try {
@@ -144,7 +160,7 @@ public abstract class AbstractWikiCardStrategy<T> implements WikiInfoStrategy {
             return true;
         }
         boolean rarityFlag = Boolean.TRUE.equals(cardDetail.getDokkanFesFlag()) || Boolean.TRUE.equals(cardDetail.getCarnivalFlag())
-                || Boolean.TRUE.equals(CardRarityEnum.isLrCard(cardDetail.getRarity())) && Boolean.FALSE.equals(cardDetail.getFreeCardFlag()) ;
+                || (Boolean.TRUE.equals(CardRarityEnum.isLrCard(cardDetail.getRarity())) && Boolean.FALSE.equals(cardDetail.getFreeCardFlag()));
         AwakeningInfoDTO lastAwaken = card.getAwakeningRoutes().getLast();
         boolean awakenFlag = cardDetail.getId().equals(lastAwaken.getAwakedCardId())
                 && Objects.nonNull(cardDetail.getCost()) && cardDetail.getCost() >= 40;

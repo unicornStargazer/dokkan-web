@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
+import java.io.Serializable;
 import java.util.Date;
 
 /**
@@ -18,7 +19,8 @@ import java.util.Date;
 @Builder
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class WikiCardBaseInfoDTO {
+public class WikiCardBaseInfoDTO implements Serializable {
+    private static final long serialVersionUID = -6474306338635635775L;
 
     /**
      * 卡牌id

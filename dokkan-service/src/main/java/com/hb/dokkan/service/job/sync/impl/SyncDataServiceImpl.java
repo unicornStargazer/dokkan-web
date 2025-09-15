@@ -6,8 +6,8 @@ import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.infrastructure.cards.DokkanCardRepository;
 import com.hb.dokkan.infrastructure.cards.domain.CardPO;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
-import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
-import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
+import com.hb.dokkan.service.domain.bo.WikiCardBO;
+import com.hb.dokkan.service.domain.dto.base.CardBaseInfoDTO;
 import com.hb.dokkan.service.job.sync.SyncDataService;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
@@ -18,12 +18,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
-import org.springframework.util.CollectionUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
- * @Description xxxxx
+ * @Description 同步数据服务
  * @Author stargazer
  * @Date 2025/6/2 0:13
  **/
@@ -39,6 +40,9 @@ public class SyncDataServiceImpl implements SyncDataService {
     @Resource
     private DokkanSyncConvert convert;
 
+    @Resource(name = "defaultTransactionTemplate")
+    private TransactionTemplate transactionTemplate;
+
     /**
      * 初始化卡片数据
      */
@@ -46,23 +50,28 @@ public class SyncDataServiceImpl implements SyncDataService {
     public void initCard() {
         WikiInfoStrategy strategy = strategyFactory.getWikiStrategy(WikiInfoTypeEnum.CARD);
         WikiContext context = new WikiContext();
-
-
         strategy.execute(context);
-        List<WikiCardDTO> wikiCards = context.getWikiCards();
-        if (CollectionUtils.isEmpty(wikiCards)) {
+        WikiCardBO cardData = context.getCardData();
+        if (Objects.isNull(cardData)) {
             log.error("初始化失败，获取卡片为空");
             return;
         }
-        List<WikiCardBaseInfoDTO> cards = wikiCards.stream()
-                .map(WikiCardDTO::getCard)
-                .toList();
-        List<CardPO> cardPOS = convert.wikiCard2POList(cards);
-        checkParam(cardPOS);
-        cardRepository.saveBatch(cardPOS, 500);
+        transactionTemplate.execute(status -> {
+            try{
+                List<CardBaseInfoDTO> cards = cardData.getCardBaseData();
+                List<CardPO> cardModel = convert.wikiCard2POList(cards);
+                checkParam(cardModel);
+                cardRepository.saveBatch(cardModel, 500);
+            }catch (Exception e){
+                log.error("SyncDataService#initCard error :{}", e.getMessage(),e);
+                status.setRollbackOnly();
+            }
+            return null;
+        });
 
 
-    }
+
+    } 
 
     private void checkParam(List<CardPO> cardPOS) {
         cardPOS.forEach(card -> {

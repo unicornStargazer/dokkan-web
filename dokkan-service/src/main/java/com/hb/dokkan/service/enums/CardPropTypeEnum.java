@@ -4,7 +4,11 @@ import com.google.common.collect.Lists;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * @Description 卡片属性枚举
@@ -59,22 +63,20 @@ public enum CardPropTypeEnum {
 
     private final String description;
 
-    private static List<CardPropTypeEnum> superProp = Lists.newArrayList(
-            SUPER_AGL,SUPER_TEQ,SUPER_PHY,SUPER_INT,SUPER_STR
-    );
+    static final List<CardPropTypeEnum> superProp;
 
+    static final List<CardPropTypeEnum> extremeProp;
 
-    private static List<CardPropTypeEnum> extremeProp = Lists.newArrayList(
-            EXTREME_AGL,EXTREME_TEQ,EXTREME_INT,EXTREME_STR,EXTREME_PHY
-    );
+    static final Map<Integer, CardPropTypeEnum> POOL;
+
+    static {
+        superProp = Lists.newArrayList(SUPER_AGL,SUPER_TEQ,SUPER_PHY,SUPER_INT,SUPER_STR);
+        extremeProp = Lists.newArrayList(EXTREME_AGL,EXTREME_TEQ,EXTREME_INT,EXTREME_STR,EXTREME_PHY);
+        POOL = Arrays.stream(values()).collect(Collectors.toMap(CardPropTypeEnum::getType, Function.identity()));
+    }
 
     public static CardPropTypeEnum getCardPropEnumByType(int type) {
-        for (CardPropTypeEnum typeEnum : CardPropTypeEnum.values()) {
-            if (typeEnum.getType() == type) {
-                return typeEnum;
-            }
-        }
-        return null;
+        return POOL.get(type);
     }
 
     public static Integer getProp(int type) {
