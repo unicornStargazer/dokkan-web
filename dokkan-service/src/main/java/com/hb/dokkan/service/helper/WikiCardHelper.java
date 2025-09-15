@@ -8,7 +8,6 @@ import com.hb.dokkan.service.domain.dto.base.CardBaseInfoAttribute;
 import com.hb.dokkan.service.domain.dto.base.CardBaseInfoDTO;
 import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
 import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
-import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -28,23 +27,29 @@ public class WikiCardHelper {
     @Resource
     private DokkanSyncConvert convert;
 
-    public void buildData(WikiCardBO cardBO, WikiContext context) {
+    public void buildData(WikiCardBO cardBO, List<WikiCardDTO> wikiCardDTOS) {
         // 基础信息构造
-        buildCardBaseInfo(cardBO, context);
+        buildCardBaseInfo(cardBO, wikiCardDTOS);
         // eza信息
-
+        buildEzaCardBaseInfo(cardBO, wikiCardDTOS);
         //
+    }
+
+    private void buildEzaCardBaseInfo(WikiCardBO cardBO, List<WikiCardDTO> wikiCards) {
+        if (CollectionUtils.isEmpty(wikiCards)) {
+            return;
+        }
+
     }
 
     /**
      * 基础信息构造
      */
-    private void buildCardBaseInfo(WikiCardBO cardBO, WikiContext context) {
-        List<WikiCardDTO> wikiCards = context.getWikiCards();
-        List<CardBaseInfoDTO> cardBaseInfos = Lists.newArrayList();
+    private void buildCardBaseInfo(WikiCardBO cardBO, List<WikiCardDTO> wikiCards) {
         if (CollectionUtils.isEmpty(wikiCards)) {
             return;
         }
+        List<CardBaseInfoDTO> cardBaseInfos = Lists.newArrayList();
         wikiCards.forEach(wikiCard -> {
             WikiCardBaseInfoDTO wikiCardBaseInfo = wikiCard.getCard();
             CardBaseInfoDTO cardBaseInfoDTO = convert.wikiCard2Dto(wikiCardBaseInfo);

@@ -71,7 +71,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
         WikiCardBO cardBO = new WikiCardBO();
         context.setWikiCards(wikiCards);
         context.setCardData(cardBO);
-        wikiCardHelper.buildData(cardBO, context);
+        wikiCardHelper.buildData(cardBO, context.getWikiCards());
     }
 
     private List<WikiCardDTO> getWikiCards() {
