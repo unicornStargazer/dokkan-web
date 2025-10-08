@@ -20,6 +20,7 @@ public class AwakeningInfoDTO {
     /**
      * 卡牌id
      */
+    @JsonProperty("card_id")
     private Long cardId;
 
     /**

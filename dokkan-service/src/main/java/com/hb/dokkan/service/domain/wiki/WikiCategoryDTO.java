@@ -1,6 +1,5 @@
 package com.hb.dokkan.service.domain.wiki;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 /**
@@ -13,7 +12,6 @@ import lombok.*;
 @Setter
 @Builder
 @NoArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class WikiCategoryDTO {
 
     /**

@@ -5,7 +5,9 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriBuilder;
 import reactor.core.publisher.Mono;
@@ -25,6 +27,9 @@ public class CommonHttpClient {
 
     @Resource(name = "dokkanInfoWebClient")
     private WebClient infoClient;
+
+    @Resource(name = "dokkanWikiRestClient")
+    private RestClient restClient;
 
     /**
      * get请求 返回单个对象
@@ -46,14 +51,15 @@ public class CommonHttpClient {
     /**
      * get请求 返回单个对象
      */
-    public <T> Optional<T> getForObject(String uri, Class<T> responseType) {
+    public <T> Optional<T> getForObjectSync(String uri, Class<T> responseType, Map<String, String> uriVariables) {
 
         try {
-            T result = execute(infoClient.get()
-                    .uri(uriBuilder -> buildUri(uri,null , uriBuilder))
-                    .retrieve(), responseType);
-            return Optional.ofNullable(result);
-
+            T result = restClient.get()
+                    .uri(uriBuilder -> buildUri(uri, uriVariables, uriBuilder))
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(responseType);
+            return result == null ? Optional.empty() : Optional.of(result);
         }catch (Exception e) {
             log.error("getForObject error! uri:{} exception:{}",uri, e.getMessage());
             return Optional.empty();

@@ -37,6 +37,7 @@ public class WikiSpecialAttackDTO implements Serializable {
     /**
      * 每个等级提升
      */
+    @JsonProperty("lv_bonus")
     private int lvBonus;
     /**
      * 类型
@@ -50,6 +51,7 @@ public class WikiSpecialAttackDTO implements Serializable {
     /**
      * 触发气力
      */
+    @JsonProperty("eball_num_start")
     private Integer eballNumStart;
 
     /**

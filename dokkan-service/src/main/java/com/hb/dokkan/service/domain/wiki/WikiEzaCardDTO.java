@@ -19,6 +19,7 @@ public class WikiEzaCardDTO implements Serializable {
     /**
      * 卡牌id
      */
+    @JsonProperty("id")
     private Long id;
 
     /**
@@ -80,10 +81,12 @@ public class WikiEzaCardDTO implements Serializable {
     /**
      * 队长技id
      */
+    @JsonProperty("leader_skill_id")
     private Integer leaderSkillId;
     /**
      * 队长技name
      */
+    @JsonProperty("leader_skill_name")
     private String leaderSkillName;
     /**
      * 队长技
@@ -93,11 +96,13 @@ public class WikiEzaCardDTO implements Serializable {
     /**
      * 被动id
      */
+    @JsonProperty("passive_skill_id")
     private Integer passiveSkillId;
 
     /**
      * 被动名称
      */
+    @JsonProperty("passive_skill_name")
     private String passiveSkillName;
     /**
      * 被动

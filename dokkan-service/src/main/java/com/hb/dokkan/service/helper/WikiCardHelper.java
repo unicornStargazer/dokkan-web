@@ -86,7 +86,7 @@ public class WikiCardHelper {
         }
         List<EzaCardInfoDTO> ezaCardInfoDTOS = Lists.newArrayList();
         wikiCards.forEach(wikiCardDTO -> {
-            List<EzaCardInfoDTO> curCardEza = convert.wikiCard2EzaDto(wikiCardDTO.getEzaCardInfos());
+            List<EzaCardInfoDTO> curCardEza = convert.wikiCard2EzaDtoList(wikiCardDTO.getEzaCardInfos());
             if (CollectionUtils.isEmpty(curCardEza)) {
                 return;
             }

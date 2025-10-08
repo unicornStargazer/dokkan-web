@@ -1,5 +1,6 @@
 package com.hb.dokkan.service.domain.wiki;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.io.Serializable;
@@ -27,10 +28,12 @@ public class WikiSkillDTO implements Serializable {
     /**
      * 发动条件
      */
+    @JsonProperty("condition_description")
     private String conditionDescription;
     /**
      * 效果描述
      */
+    @JsonProperty("effect_description")
     private String effectDescription;
     /**
      * 标签
@@ -39,13 +42,16 @@ public class WikiSkillDTO implements Serializable {
     /**
      * 提升倍率
      */
+    @JsonProperty("increase_rate")
     private Integer increaseRate;
     /**
      * 类别id
      */
+    @JsonProperty("special_category_id")
     private Integer specialCategoryId;
     /**
      * 类别名称
      */
+    @JsonProperty("special_category_name")
     private String specialCategoryName;
 }

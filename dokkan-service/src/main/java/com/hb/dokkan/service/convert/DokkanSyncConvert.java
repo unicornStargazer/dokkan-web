@@ -65,20 +65,27 @@ public interface DokkanSyncConvert {
     /**
      * wiki转eza
      */
+    List<EzaCardInfoDTO> wikiCard2EzaDtoList(List<WikiEzaCardDTO> ezaCardInfos);
+
     @Mapping(source = "id", target = "cardId")
-    List<EzaCardInfoDTO> wikiCard2EzaDto(List<WikiEzaCardDTO> ezaCardInfos);
+    EzaCardInfoDTO wikiCard2EzaDto(WikiEzaCardDTO ezaCardInfo);
 
     /**
      * wiki转skill
      */
-    @Mapping(source = "id", target = "skillId")
+
     List<SkillDTO> wikiSkill2DtoList(List<WikiSkillDTO> skills);
+
+    @Mapping(source = "id", target = "skillId")
+    SkillDTO wikiSkill2Dto(WikiSkillDTO skills);
 
     /**
      * wiki 转 必杀
      */
-    @Mapping(source = "id", target = "specialId")
     List<SpecialAttackDTO> wikiSpecial2DtoList(List<WikiSpecialAttackDTO> specials);
+
+    @Mapping(source = "id", target = "specialId")
+    SpecialAttackDTO wikiSpecial2Dto(WikiSpecialAttackDTO specials);
 
     /**
      * skill dto 转 po

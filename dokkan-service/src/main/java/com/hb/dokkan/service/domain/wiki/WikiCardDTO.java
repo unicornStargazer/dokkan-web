@@ -1,6 +1,5 @@
 package com.hb.dokkan.service.domain.wiki;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
@@ -16,7 +15,6 @@ import java.util.List;
 @Setter
 @Builder
 @NoArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class WikiCardDTO {
     /**
      * 卡的基础信息

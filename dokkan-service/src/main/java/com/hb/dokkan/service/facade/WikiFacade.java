@@ -42,7 +42,7 @@ public class WikiFacade {
         String url = SyncCardUrlEnum.WIKI_CARDS.getUrl() + cardId;
 
         return RetryTemplate.executeWithRetrySliently(() -> {
-            Optional<WikiCardDTO> optional = httpClient.getForObject(url, WikiCardDTO.class, null);
+            Optional<WikiCardDTO> optional = httpClient.getForObjectSync(url, WikiCardDTO.class, null);
             return optional.orElse(null);
         }, httpPoolProperties.getRetry(), "getWikiCard-cardId:" + cardId);
     }

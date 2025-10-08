@@ -1,7 +1,6 @@
 package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
@@ -18,7 +17,6 @@ import java.util.Date;
 @Setter
 @Builder
 @NoArgsConstructor
-@JsonIgnoreProperties(ignoreUnknown = true)
 public class WikiCardBaseInfoDTO implements Serializable {
     private static final long serialVersionUID = -6474306338635635775L;
 
@@ -77,20 +75,24 @@ public class WikiCardBaseInfoDTO implements Serializable {
     /**
      * 队长技id
      */
+    @JsonProperty("leader_skill_set_id")
     private Long leaderSkillSetId;
     /**
      * 队长技
      */
+    @JsonProperty("leader_skill")
     private String leaderSkill;
 
     /**
      * 被动id
      */
+    @JsonProperty("passive_skill_set_id")
     private Long passiveSkillSetId;
 
     /**
      * 被动名称
      */
+    @JsonProperty("passive_skill_name")
     private String passiveSkillName;
     /**
      * 被动
@@ -101,23 +103,28 @@ public class WikiCardBaseInfoDTO implements Serializable {
     /**
      * 主动技id
      */
+    @JsonProperty("active_skill_id")
     private Integer activeSkillId;
     /**
      * 主动技名称
      */
+    @JsonProperty("active_skill_name")
     private String activeSkillName;
     /**
      * 主动技效果
      */
+    @JsonProperty("active_skill_effect")
     private String activeSkillEffect;
     /**
      * 主动技条件
      */
+    @JsonProperty("active_skill_condition")
     private String activeSkillCondition;
 
     /**
      * skillLevelMax
      */
+    @JsonProperty("skill_level_max")
     private Integer skillLevelMax;
     /**
      * 免费标志
