@@ -15,7 +15,7 @@ import java.io.Serializable;
 @AllArgsConstructor
 @Builder
 @NoArgsConstructor
-public class SpecialAttackDTO implements Serializable {
+public class WikiSpecialAttackDTO implements Serializable {
     private static final long serialVersionUID = -749267422876885930L;
     /**
      * 必杀id

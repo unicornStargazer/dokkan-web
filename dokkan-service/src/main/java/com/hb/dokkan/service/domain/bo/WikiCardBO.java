@@ -1,6 +1,9 @@
 package com.hb.dokkan.service.domain.bo;
 
 import com.hb.dokkan.service.domain.dto.base.CardBaseInfoDTO;
+import com.hb.dokkan.service.domain.dto.base.EzaCardInfoDTO;
+import com.hb.dokkan.service.domain.dto.base.SkillDTO;
+import com.hb.dokkan.service.domain.dto.base.SpecialAttackDTO;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -19,4 +22,19 @@ public class WikiCardBO implements Serializable {
      * 卡牌基础信息
      */
     private List<CardBaseInfoDTO> cardBaseData;
+
+    /**
+     * 卡牌极限信息
+     */
+    private List<EzaCardInfoDTO> ezaCardInfos;
+
+    /**
+     * 卡牌下拉技能信息
+     */
+    private List<SkillDTO> downPullSkills;
+
+    /**
+     * 必杀信息
+     */
+    private List<SpecialAttackDTO> specialAttacks;
 }

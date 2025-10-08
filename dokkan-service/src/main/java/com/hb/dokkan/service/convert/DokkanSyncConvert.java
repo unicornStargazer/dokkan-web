@@ -1,9 +1,14 @@
 package com.hb.dokkan.service.convert;
 
 import com.hb.dokkan.infrastructure.cards.domain.CardPO;
-import com.hb.dokkan.service.domain.dto.base.CardBaseInfoAttribute;
-import com.hb.dokkan.service.domain.dto.base.CardBaseInfoDTO;
+import com.hb.dokkan.infrastructure.cards.domain.EzaCardPO;
+import com.hb.dokkan.infrastructure.cards.domain.SkillPO;
+import com.hb.dokkan.infrastructure.cards.domain.SpecialPO;
+import com.hb.dokkan.service.domain.dto.base.*;
 import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
+import com.hb.dokkan.service.domain.wiki.WikiEzaCardDTO;
+import com.hb.dokkan.service.domain.wiki.WikiSkillDTO;
+import com.hb.dokkan.service.domain.wiki.WikiSpecialAttackDTO;
 import com.hb.dokkan.service.enums.CardPropTypeEnum;
 import org.mapstruct.*;
 
@@ -35,7 +40,7 @@ public interface DokkanSyncConvert {
             @Mapping(target = "type", qualifiedByName = "getType",source = "propType"),
             @Mapping(target = "propType", qualifiedByName = "getPropType",source = "propType"),
     })
-    CardBaseInfoDTO wikiCard2Dto(WikiCardBaseInfoDTO wikiCard);
+    CardBaseInfoDTO wikiCard2BaseDto(WikiCardBaseInfoDTO wikiCard);
 
 
 
@@ -56,4 +61,37 @@ public interface DokkanSyncConvert {
      * wiki 转 attribute
      */
     CardBaseInfoAttribute wikiCard2Attribute(WikiCardBaseInfoDTO card);
+
+    /**
+     * wiki转eza
+     */
+    @Mapping(source = "id", target = "cardId")
+    List<EzaCardInfoDTO> wikiCard2EzaDto(List<WikiEzaCardDTO> ezaCardInfos);
+
+    /**
+     * wiki转skill
+     */
+    @Mapping(source = "id", target = "skillId")
+    List<SkillDTO> wikiSkill2DtoList(List<WikiSkillDTO> skills);
+
+    /**
+     * wiki 转 必杀
+     */
+    @Mapping(source = "id", target = "specialId")
+    List<SpecialAttackDTO> wikiSpecial2DtoList(List<WikiSpecialAttackDTO> specials);
+
+    /**
+     * skill dto 转 po
+     */
+    List<SkillPO> wikiSkill2POList(List<SkillDTO> downPullSkills);
+
+    /**
+     * eza dto 转 po
+     */
+    List<EzaCardPO> wikiEza2POList(List<EzaCardInfoDTO> ezaCardInfos);
+
+    /**
+     * eza dto 转 po
+     */
+    List<SpecialPO> wikiSpecial2POList(List<SpecialAttackDTO> specialAttackDTOS);
 }

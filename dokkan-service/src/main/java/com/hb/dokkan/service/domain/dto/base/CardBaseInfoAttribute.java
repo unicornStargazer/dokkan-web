@@ -1,11 +1,14 @@
 package com.hb.dokkan.service.domain.dto.base;
 
+import com.hb.dokkan.service.domain.wiki.CardTransformationDTO;
+import com.hb.dokkan.service.domain.wiki.PotentialDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * @Description 扩展属性
@@ -69,5 +72,25 @@ public class CardBaseInfoAttribute implements Serializable {
      * 祭限定
      */
     private Boolean carnivalFlag;
+
+    /**
+     * 分类id
+     */
+    private List<Long> categoryId;
+
+    /**
+     * 链接id
+     */
+    private List<Long> linkId;
+
+    /**
+     * 三围潜力值
+     */
+    private List<PotentialDTO> potential;
+
+    /**
+     * 变身后信息
+     */
+    private List<CardTransformationDTO.NextCardDTO> nextCards;
 
 }

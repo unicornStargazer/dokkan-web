@@ -42,7 +42,7 @@ public class WikiCardDTO {
     /**
      * 必杀
      */
-    private List<SpecialAttackDTO> specials;
+    private List<WikiSpecialAttackDTO> specials;
 
     /**
      * 觉醒相关信息

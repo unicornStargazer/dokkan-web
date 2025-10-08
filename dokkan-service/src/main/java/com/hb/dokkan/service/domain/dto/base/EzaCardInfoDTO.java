@@ -1,7 +1,5 @@
 package com.hb.dokkan.service.domain.dto.base;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -19,7 +17,7 @@ public class EzaCardInfoDTO implements Serializable {
     /**
      * 卡牌id
      */
-    private Long id;
+    private Long cardId;
 
     /**
      * 极限阶段
@@ -48,30 +46,24 @@ public class EzaCardInfoDTO implements Serializable {
     /**
      * 属性
      */
-    @JsonProperty("element")
     private Integer propType;
 
     /**
      * 生命值
      */
-    @JsonProperty("hp_max")
     private Long hpValue;
 
     /**
      * 攻击值
      */
-    @JsonProperty("atk_max")
     private Long atkValue;
     /**
      * 防御值
      */
-    @JsonProperty("def_max")
     private Long defValue;
     /**
      * 发布实际
      */
-    @JsonProperty("open_at")
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd", timezone = "GMT+8")
     private Date openAt;
     /**
      * 描述
@@ -88,7 +80,6 @@ public class EzaCardInfoDTO implements Serializable {
     /**
      * 队长技
      */
-    @JsonProperty("leader_skill_description")
     private String leaderSkill;
     /**
      * 被动id
@@ -102,21 +93,17 @@ public class EzaCardInfoDTO implements Serializable {
     /**
      * 被动
      */
-    @JsonProperty("passive_skill_itemized_desc")
     private String passiveSkillDesc;
     /**
      * 免费标志
      */
-    @JsonProperty("is_f2p")
     private Boolean freeCardFlag;
     /**
      * 限定标志
      */
-    @JsonProperty("is_dokkan_fes")
     private Boolean dokkanFesFlag;
     /**
      * 祭限定
      */
-    @JsonProperty("is_carnival_only")
     private Boolean carnivalFlag;
 }

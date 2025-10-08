@@ -4,16 +4,15 @@ import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Lists;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.service.domain.bo.WikiCardBO;
-import com.hb.dokkan.service.domain.dto.base.CardBaseInfoAttribute;
-import com.hb.dokkan.service.domain.dto.base.CardBaseInfoDTO;
-import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
-import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
+import com.hb.dokkan.service.domain.dto.base.*;
+import com.hb.dokkan.service.domain.wiki.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * @Description wiki card同步数据工具类
@@ -27,19 +26,73 @@ public class WikiCardHelper {
     @Resource
     private DokkanSyncConvert convert;
 
+    /**
+     * 构建卡牌信息
+     */
     public void buildData(WikiCardBO cardBO, List<WikiCardDTO> wikiCardDTOS) {
         // 基础信息构造
         buildCardBaseInfo(cardBO, wikiCardDTOS);
         // eza信息
         buildEzaCardBaseInfo(cardBO, wikiCardDTOS);
-        //
+        // skill信息
+        buildCardSkillInfo(cardBO, wikiCardDTOS);
+        // 必杀信息
+        buildSpecialAttackInfo(cardBO,wikiCardDTOS);
+
     }
 
+    /**
+     * 必杀信息
+     */
+    private void buildSpecialAttackInfo(WikiCardBO cardBO, List<WikiCardDTO> wikiCardDTOS) {
+        List<SpecialAttackDTO> specialAttacks = Lists.newArrayList();
+        wikiCardDTOS.forEach(wikiCardDTO -> {
+            if (!CollectionUtils.isEmpty(wikiCardDTO.getSpecials())) {
+                List<SpecialAttackDTO> specialAttackDTOS = convert.wikiSpecial2DtoList(wikiCardDTO.getSpecials());
+                Optional.ofNullable(specialAttackDTOS).ifPresent(specialAttacks::addAll);
+            }
+        });
+        cardBO.setSpecialAttacks(specialAttacks);
+    }
+
+    /**
+     * skill信息
+     */
+    private void buildCardSkillInfo(WikiCardBO cardBO, List<WikiCardDTO> wikiCardDTOS) {
+        List<SkillDTO> skills = Lists.newArrayList();
+        wikiCardDTOS.forEach(wikiCardDTO -> {
+            if (!CollectionUtils.isEmpty(wikiCardDTO.getFinishSkills())) {
+                List<SkillDTO> finishSkills = buildSkillDetail(wikiCardDTO.getFinishSkills());
+                Optional.ofNullable(finishSkills).ifPresent(skills::addAll);
+            }
+            if (CollectionUtils.isEmpty(wikiCardDTO.getStandbySkills())) {
+                List<SkillDTO> standbySkills = buildSkillDetail(wikiCardDTO.getStandbySkills());
+                Optional.ofNullable(standbySkills).ifPresent(skills::addAll);
+            }
+        });
+        cardBO.setDownPullSkills(skills);
+    }
+
+    private List<SkillDTO> buildSkillDetail(List<WikiSkillDTO> skills) {
+        return convert.wikiSkill2DtoList(skills);
+    }
+
+    /**
+     * 极限信息构造
+     */
     private void buildEzaCardBaseInfo(WikiCardBO cardBO, List<WikiCardDTO> wikiCards) {
         if (CollectionUtils.isEmpty(wikiCards)) {
             return;
         }
-
+        List<EzaCardInfoDTO> ezaCardInfoDTOS = Lists.newArrayList();
+        wikiCards.forEach(wikiCardDTO -> {
+            List<EzaCardInfoDTO> curCardEza = convert.wikiCard2EzaDto(wikiCardDTO.getEzaCardInfos());
+            if (CollectionUtils.isEmpty(curCardEza)) {
+                return;
+            }
+            ezaCardInfoDTOS.addAll(curCardEza);
+        });
+        cardBO.setEzaCardInfos(ezaCardInfoDTOS);
     }
 
     /**
@@ -52,7 +105,7 @@ public class WikiCardHelper {
         List<CardBaseInfoDTO> cardBaseInfos = Lists.newArrayList();
         wikiCards.forEach(wikiCard -> {
             WikiCardBaseInfoDTO wikiCardBaseInfo = wikiCard.getCard();
-            CardBaseInfoDTO cardBaseInfoDTO = convert.wikiCard2Dto(wikiCardBaseInfo);
+            CardBaseInfoDTO cardBaseInfoDTO = convert.wikiCard2BaseDto(wikiCardBaseInfo);
             cardBaseInfoDTO.setAttributes(buildAttributes(wikiCard));
             cardBaseInfos.add(cardBaseInfoDTO);
         });
@@ -63,6 +116,15 @@ public class WikiCardHelper {
     private String buildAttributes(WikiCardDTO wikiCard) {
         WikiCardBaseInfoDTO card = wikiCard.getCard();
         CardBaseInfoAttribute attribute = convert.wikiCard2Attribute(card);
+        attribute.setPotential(wikiCard.getPotential());
+        List<Long> categoryIds = wikiCard.getCategories().stream().map(WikiCategoryDTO::getId).toList();
+        List<Long> linkIds = wikiCard.getCardLinks().stream().map(WikiLinkDTO::getId).toList();
+        attribute.setCategoryId(categoryIds);
+        attribute.setLinkId(linkIds);
+        if (!CollectionUtils.isEmpty(wikiCard.getTransformations())) {
+            List<CardTransformationDTO.NextCardDTO> nextCardDTOS = wikiCard.getTransformations().stream().map(CardTransformationDTO::getNextCard).toList();
+            attribute.setNextCards(nextCardDTOS);
+        }
         return JSON.toJSONString(attribute);
     }
 
