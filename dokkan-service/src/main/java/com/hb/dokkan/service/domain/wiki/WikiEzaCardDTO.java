@@ -19,7 +19,6 @@ public class WikiEzaCardDTO implements Serializable {
     /**
      * 卡牌id
      */
-    @JsonProperty("id")
     private Long id;
 
     /**
@@ -29,6 +28,7 @@ public class WikiEzaCardDTO implements Serializable {
     /**
      * 最大等级
      */
+    @JsonProperty("lv_max")
     private Integer lvMax;
 
     /**

@@ -63,11 +63,19 @@ public interface DokkanSyncConvert {
     CardBaseInfoAttribute wikiCard2Attribute(WikiCardBaseInfoDTO card);
 
     /**
+     * eza 转 attribute
+     */
+    @Mappings({
+            @Mapping(source = "leaderSkillId", target = "leaderSkillSetId"),
+            @Mapping(source = "passiveSkillId",target = "passiveSkillSetId"),
+    })
+    CardBaseInfoAttribute wikiCard2EzaAttribute(EzaCardInfoDTO card);
+
+    /**
      * wiki转eza
      */
     List<EzaCardInfoDTO> wikiCard2EzaDtoList(List<WikiEzaCardDTO> ezaCardInfos);
 
-    @Mapping(source = "id", target = "cardId")
     EzaCardInfoDTO wikiCard2EzaDto(WikiEzaCardDTO ezaCardInfo);
 
     /**

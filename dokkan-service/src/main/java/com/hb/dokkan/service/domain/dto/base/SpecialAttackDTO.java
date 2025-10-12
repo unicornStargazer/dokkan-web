@@ -1,5 +1,6 @@
 package com.hb.dokkan.service.domain.dto.base;
 
+import com.google.common.base.Objects;
 import lombok.*;
 
 import java.io.Serializable;
@@ -74,4 +75,14 @@ public class SpecialAttackDTO implements Serializable {
      */
     private Integer specialBonus2Lv;
 
+    @Override
+    public boolean equals(Object object) {
+        if (!(object instanceof SpecialAttackDTO that)) return false;
+        return lvBonus == that.lvBonus && Objects.equal(specialId, that.specialId) && Objects.equal(name, that.name) && Objects.equal(description, that.description) && Objects.equal(increaseRate, that.increaseRate) && Objects.equal(style, that.style) && Objects.equal(lvStart, that.lvStart) && Objects.equal(eballNumStart, that.eballNumStart) && Objects.equal(specialCategoryId, that.specialCategoryId) && Objects.equal(specialCategoryName, that.specialCategoryName) && Objects.equal(specialBonus1, that.specialBonus1) && Objects.equal(specialBonus2, that.specialBonus2) && Objects.equal(specialBonus1Lv, that.specialBonus1Lv) && Objects.equal(specialBonus2Lv, that.specialBonus2Lv);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(specialId, name, description, increaseRate, lvBonus, style, lvStart, eballNumStart, specialCategoryId, specialCategoryName, specialBonus1, specialBonus2, specialBonus1Lv, specialBonus2Lv);
+    }
 }

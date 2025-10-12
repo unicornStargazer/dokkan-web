@@ -1,5 +1,6 @@
 package com.hb.dokkan.service.domain.dto.base;
 
+import com.google.common.base.Objects;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -42,4 +43,16 @@ public class SkillDTO implements Serializable {
      * 类别名称
      */
     private String specialCategoryName;
+
+
+    @Override
+    public boolean equals(Object object) {
+        if (!(object instanceof SkillDTO skillDTO)) return false;
+        return Objects.equal(skillId, skillDTO.skillId) && Objects.equal(name, skillDTO.name) && Objects.equal(conditionDescription, skillDTO.conditionDescription) && Objects.equal(effectDescription, skillDTO.effectDescription) && Objects.equal(label, skillDTO.label) && Objects.equal(increaseRate, skillDTO.increaseRate) && Objects.equal(specialCategoryId, skillDTO.specialCategoryId) && Objects.equal(specialCategoryName, skillDTO.specialCategoryName);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(skillId, name, conditionDescription, effectDescription, label, increaseRate, specialCategoryId, specialCategoryName);
+    }
 }

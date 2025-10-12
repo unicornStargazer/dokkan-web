@@ -84,6 +84,25 @@ public class EzaCardPO extends CardPO {
     private Date publishTime;
 
     /**
+     * 队长技id
+     */
+    private Long leaderSkillId;
+
+    /**
+     * 队长技
+     */
+    private String leaderSkill;
+    /**
+     * 被动技id
+     */
+    private Integer passiveSkillId;
+
+     /**
+     * 被动技描述
+     */
+    private String passiveSkillDesc;
+
+    /**
      * 扩展属性
      */
     private String attributes;

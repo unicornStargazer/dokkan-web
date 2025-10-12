@@ -6,6 +6,7 @@ import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.service.domain.bo.WikiCardBO;
 import com.hb.dokkan.service.domain.dto.base.*;
 import com.hb.dokkan.service.domain.wiki.*;
+import com.hb.dokkan.service.enums.CardPropTypeEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -90,9 +91,28 @@ public class WikiCardHelper {
             if (CollectionUtils.isEmpty(curCardEza)) {
                 return;
             }
+            curCardEza.forEach(curCardEzaDTO -> {
+                curCardEzaDTO.setCardId(wikiCardDTO.getCard().getId());
+                curCardEzaDTO.setCardName(wikiCardDTO.getCard().getName());
+                curCardEzaDTO.setTitle(wikiCardDTO.getCard().getTitle());
+                curCardEzaDTO.setCost(wikiCardDTO.getCard().getCost());
+                curCardEzaDTO.setCarnivalFlag(wikiCardDTO.getCard().getCarnivalFlag());
+                curCardEzaDTO.setFreeCardFlag(wikiCardDTO.getCard().getFreeCardFlag());
+                curCardEzaDTO.setDokkanFesFlag(wikiCardDTO.getCard().getDokkanFesFlag());
+                curCardEzaDTO.setPropType(wikiCardDTO.getCard().getPropType());
+                curCardEzaDTO.setType(CardPropTypeEnum.getProp(curCardEzaDTO.getPropType()));
+                curCardEzaDTO.setPublishTime(wikiCardDTO.getCard().getOpenAt());
+                curCardEzaDTO.setRarity(wikiCardDTO.getCard().getRarity());
+                curCardEzaDTO.setAttributes(buildEzaAttributes(curCardEzaDTO));
+            });
             ezaCardInfoDTOS.addAll(curCardEza);
         });
         cardBO.setEzaCardInfos(ezaCardInfoDTOS);
+    }
+
+    private String buildEzaAttributes(EzaCardInfoDTO curCardEzaDTO) {
+        CardBaseInfoAttribute ezaAttr = convert.wikiCard2EzaAttribute(curCardEzaDTO);
+        return JSON.toJSONString(ezaAttr);
     }
 
     /**

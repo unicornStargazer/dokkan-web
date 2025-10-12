@@ -1,5 +1,6 @@
 package com.hb.dokkan.service.domain.dto.base;
 
+import com.hb.dokkan.common.utils.JsonUtils;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -31,7 +32,7 @@ public class EzaCardInfoDTO implements Serializable {
     /**
      * 卡牌名称
      */
-    private String name;
+    private String cardName;
 
     /**
      * cost
@@ -42,6 +43,11 @@ public class EzaCardInfoDTO implements Serializable {
      * @see com.hb.dokkan.service.enums.CardRarityEnum
      */
     private Integer rarity;
+
+    /**
+     * 属性（超 极）
+     */
+    private Integer type;
 
     /**
      * 属性
@@ -64,7 +70,7 @@ public class EzaCardInfoDTO implements Serializable {
     /**
      * 发布实际
      */
-    private Date openAt;
+    private Date publishTime;
     /**
      * 描述
      */
@@ -106,4 +112,15 @@ public class EzaCardInfoDTO implements Serializable {
      * 祭限定
      */
     private Boolean carnivalFlag;
+
+    /**
+     * 扩展属性
+     */
+    private String attributes;
+
+    private CardBaseInfoAttribute ezaCardInfoAttribute;
+
+    public CardBaseInfoAttribute getEzaCardInfoAttribute() {
+        return JsonUtils.json2Object(this.attributes, CardBaseInfoAttribute.class);
+    }
 }

@@ -87,26 +87,30 @@ public class SyncDataServiceImpl implements SyncDataService {
             }
             return null;
         });
+        log.info("初始化完成");
     }
 
     private void insertSpecialInfo(List<SpecialAttackDTO> specialAttacks) {
         if (CollectionUtils.isEmpty(specialAttacks)) {
             return;
         }
-        List<SpecialPO> specialPOS = convert.wikiSpecial2POList(specialAttacks);
-        specialRepository.saveBatch(specialPOS);
+        List<SpecialAttackDTO> distinctList = distinctList(specialAttacks);
+        List<SpecialPO> specialPOS = convert.wikiSpecial2POList(distinctList);
+        specialRepository.saveBatch(specialPOS, 1000);
     }
 
     private void insertEzaCardInfo(List<EzaCardInfoDTO> ezaCardInfos) {
         if (CollectionUtils.isEmpty(ezaCardInfos)) {
             return;
         }
-        List<EzaCardPO> ezaCardPOS = convert.wikiEza2POList(ezaCardInfos);
+        List<EzaCardInfoDTO> distinctList = distinctList(ezaCardInfos);
+        List<EzaCardPO> ezaCardPOS = convert.wikiEza2POList(distinctList);
         ezaCardRepository.saveBatch(ezaCardPOS);
     }
 
     private void insertDownPullSkillInfo(List<SkillDTO> downPullSkills) {
-        List<SkillPO> skillPOS = convert.wikiSkill2POList(downPullSkills);
+        List<SkillDTO> distinctList = distinctList(downPullSkills);
+        List<SkillPO> skillPOS = convert.wikiSkill2POList(distinctList);
         if (CollectionUtils.isEmpty(skillPOS)) {
             return;
         }
@@ -114,9 +118,15 @@ public class SyncDataServiceImpl implements SyncDataService {
     }
 
     private void insertCardBaseInfo(List<CardBaseInfoDTO> cards) {
-        List<CardPO> cardModel = convert.wikiCard2POList(cards);
+        List<CardBaseInfoDTO> distinctedList = distinctList(cards);
+        List<CardPO> cardModel = convert.wikiCard2POList(distinctedList);
         checkParam(cardModel);
         cardRepository.saveBatch(cardModel, 500);
+    }
+
+    private <T> List<T> distinctList(List<T> dataList) {
+        List<T> distinctList = dataList.stream().distinct().toList();
+        return distinctList;
     }
 
     private void checkParam(List<CardPO> cardPOS) {

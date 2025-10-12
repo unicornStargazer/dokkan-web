@@ -2,6 +2,7 @@ package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.Objects;
 import lombok.*;
 
 /**
@@ -52,5 +53,15 @@ public class CardTransformationDTO {
         @JsonProperty("base_id")
         private Long baseId;
 
+        @Override
+        public boolean equals(Object object) {
+            if (!(object instanceof NextCardDTO that)) return false;
+            return Objects.equal(id, that.id) && Objects.equal(name, that.name) && Objects.equal(baseId, that.baseId);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(id, name, baseId);
+        }
     }
 }

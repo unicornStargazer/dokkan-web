@@ -1,5 +1,6 @@
 package com.hb.dokkan.service.domain.dto.base;
 
+import com.google.common.base.Objects;
 import com.hb.dokkan.service.domain.wiki.CardTransformationDTO;
 import com.hb.dokkan.service.domain.wiki.PotentialDTO;
 import lombok.AllArgsConstructor;
@@ -93,4 +94,14 @@ public class CardBaseInfoAttribute implements Serializable {
      */
     private List<CardTransformationDTO.NextCardDTO> nextCards;
 
+    @Override
+    public boolean equals(Object object) {
+        if (!(object instanceof CardBaseInfoAttribute attribute)) return false;
+        return Objects.equal(leaderSkillSetId, attribute.leaderSkillSetId) && Objects.equal(leaderSkill, attribute.leaderSkill) && Objects.equal(passiveSkillSetId, attribute.passiveSkillSetId) && Objects.equal(passiveSkillName, attribute.passiveSkillName) && Objects.equal(passiveSkillDesc, attribute.passiveSkillDesc) && Objects.equal(activeSkillId, attribute.activeSkillId) && Objects.equal(activeSkillName, attribute.activeSkillName) && Objects.equal(activeSkillEffect, attribute.activeSkillEffect) && Objects.equal(activeSkillCondition, attribute.activeSkillCondition) && Objects.equal(skillLevelMax, attribute.skillLevelMax) && Objects.equal(freeCardFlag, attribute.freeCardFlag) && Objects.equal(dokkanFesFlag, attribute.dokkanFesFlag) && Objects.equal(carnivalFlag, attribute.carnivalFlag) && Objects.equal(categoryId, attribute.categoryId) && Objects.equal(linkId, attribute.linkId) && Objects.equal(potential, attribute.potential) && Objects.equal(nextCards, attribute.nextCards);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(leaderSkillSetId, leaderSkill, passiveSkillSetId, passiveSkillName, passiveSkillDesc, activeSkillId, activeSkillName, activeSkillEffect, activeSkillCondition, skillLevelMax, freeCardFlag, dokkanFesFlag, carnivalFlag, categoryId, linkId, potential, nextCards);
+    }
 }

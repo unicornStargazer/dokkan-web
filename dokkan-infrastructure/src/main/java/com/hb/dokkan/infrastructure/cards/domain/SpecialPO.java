@@ -1,5 +1,6 @@
 package com.hb.dokkan.infrastructure.cards.domain;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.hb.dokkan.common.domain.BasePO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -13,6 +14,7 @@ import java.io.Serializable;
  */
 @EqualsAndHashCode(callSuper = true)
 @Data
+@TableName("special")
 public class SpecialPO extends BasePO implements Serializable {
 
     private static final long serialVersionUID = 499775237392294039L;
