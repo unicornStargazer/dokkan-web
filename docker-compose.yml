@@ -1,0 +1,87 @@
+version: '3'
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.10.4
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - ../data/elasticsearch_data
+    networks:
+      - mogu
+  mysql:
+    image: registry.cn-shenzhen.aliyuncs.com/mogublog/mysql
+    restart: always
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: huangbiao980930
+    command:
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+      --explicit_defaults_for_timestamp=true
+      --lower_case_table_names=1
+    ports:
+      - 3306:3306
+    volumes:
+      - ../data/mysql_data:/var/lib/mysql
+      - ./mysql/init/:/docker-entrypoint-initdb.d/
+    networks:
+      - mogu
+
+  redis:
+    image: registry.cn-shenzhen.aliyuncs.com/mogublog/redis
+    restart: always
+    container_name: redis
+    ports:
+      - 6379:6379
+    command: redis-server --requirepass huangbiao980930 --appendonly yes # 启动redis服务并添加密码为：huangbiao980930,并开启redis持久化配置
+    volumes:
+      - ../data/redis_data:/data
+    networks:
+      - mogu
+
+  rabbitmq:
+    restart: always
+    image: registry.cn-shenzhen.aliyuncs.com/mogublog/rabbitmq
+    container_name: rabbitmq
+    ports:
+      - 5672:5672
+      - 15672:15672
+    environment:
+      TZ: Asia/Shanghai
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: huangbiao980930
+    volumes:
+      - ../data/rabbitmq_data:/var/lib/rabbitmq/mnesia
+    networks:
+      - mogu
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    restart: "always"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - "MINIO_ACCESS_KEY=huangbiao980930"
+      - "MINIO_SECRET_KEY=huangbiao980930"
+    command:
+      server /data
+      --console-address ":9001"
+    volumes:
+      - ../data/minio_data:/data
+      - ../config/minio/minio:/minio
+      - ../config/minio/config:/root/.minio
+    networks:
+      - mogu
+
+networks:
+  mogu:
+    external: true

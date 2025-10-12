@@ -95,7 +95,6 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
             HttpPoolProperties.Concurrency concurrencyConfig = httpPoolProperties.getConcurrency();
             int batchSize = concurrencyConfig.getBatchSize();
-
             List<WikiCardDTO> allResult = Lists.newArrayList();
 
             for (int i = 0; i < cardIds.size(); i+= batchSize) {

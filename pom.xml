@@ -24,6 +24,8 @@
         <dokkan.version>1.0.0-SNAPSHOT</dokkan.version>
         <jsoup.version>1.17.2</jsoup.version>
         <opencc4j.version>1.6.2</opencc4j.version>
+        <elasticsearch.version>7.17.28</elasticsearch.version>
+        <easy-es.version>3.0.0</easy-es.version>
     </properties>
 
     <dependencyManagement>
@@ -71,6 +73,41 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!--springboot管理-->
+
+            <!--es相关-->
+            <dependency>
+                <groupId>co.elastic.clients</groupId>
+                <artifactId>elasticsearch-java</artifactId>
+                <exclusions>
+                    <exclusion>
+                        <groupId>co.elastic.clients</groupId>
+                        <artifactId>elasticsearch-rest-client</artifactId>
+                    </exclusion>
+                </exclusions>
+                <version>${elasticsearch.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.elasticsearch</groupId>
+                <artifactId>elasticsearch</artifactId>
+                <version>${elasticsearch.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.elasticsearch.client</groupId>
+                <artifactId>elasticsearch-rest-client</artifactId>
+                <version>${elasticsearch.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.elasticsearch</groupId>
+                <artifactId>elasticsearch-geo</artifactId>
+                <version>${elasticsearch.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.dromara.easy-es</groupId>
+                <artifactId>easy-es-boot-starter</artifactId>
+                <version>${easy-es.version}</version>
+            </dependency>
+            <!--es相关-->
 
             <!--fastjson start-->
             <dependency>
