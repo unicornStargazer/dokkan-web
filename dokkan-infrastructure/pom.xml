@@ -18,6 +18,11 @@
             <artifactId>dokkan-common</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-service</artifactId>
+        </dependency>
+
     </dependencies>
 
 </project>

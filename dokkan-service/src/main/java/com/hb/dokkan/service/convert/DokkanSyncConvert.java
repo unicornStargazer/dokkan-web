@@ -1,10 +1,10 @@
 package com.hb.dokkan.service.convert;
 
-import com.hb.dokkan.infrastructure.cards.domain.CardPO;
-import com.hb.dokkan.infrastructure.cards.domain.EzaCardPO;
-import com.hb.dokkan.infrastructure.cards.domain.SkillPO;
-import com.hb.dokkan.infrastructure.cards.domain.SpecialPO;
-import com.hb.dokkan.service.domain.dto.base.*;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.CardPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
+import com.hb.dokkan.service.domain.card.dto.*;
 import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
 import com.hb.dokkan.service.domain.wiki.WikiEzaCardDTO;
 import com.hb.dokkan.service.domain.wiki.WikiSkillDTO;

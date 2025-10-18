@@ -1,22 +1,27 @@
 package com.hb.dokkan.service.job.sync.impl;
 
 import com.alibaba.fastjson.JSON;
+import com.google.common.collect.Maps;
 import com.hb.dokkan.common.constants.ResponseErrorCode;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import com.hb.dokkan.infrastructure.cards.DokkanCardRepository;
-import com.hb.dokkan.infrastructure.cards.DokkanEzaCardRepository;
-import com.hb.dokkan.infrastructure.cards.DokkanSkillRepository;
-import com.hb.dokkan.infrastructure.cards.DokkanSpecialRepository;
-import com.hb.dokkan.infrastructure.cards.domain.CardPO;
-import com.hb.dokkan.infrastructure.cards.domain.EzaCardPO;
-import com.hb.dokkan.infrastructure.cards.domain.SkillPO;
-import com.hb.dokkan.infrastructure.cards.domain.SpecialPO;
+import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
+import com.hb.dokkan.infrastructure.es.card.DokkanEsCardMapper;
+import com.hb.dokkan.infrastructure.es.card.domain.CardEsPO;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanEzaCardRepository;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanSkillRepository;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanSpecialRepository;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.CardPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
-import com.hb.dokkan.service.domain.bo.WikiCardBO;
-import com.hb.dokkan.service.domain.dto.base.CardBaseInfoDTO;
-import com.hb.dokkan.service.domain.dto.base.EzaCardInfoDTO;
-import com.hb.dokkan.service.domain.dto.base.SkillDTO;
-import com.hb.dokkan.service.domain.dto.base.SpecialAttackDTO;
+import com.hb.dokkan.service.domain.card.bo.WikiCardBO;
+import com.hb.dokkan.service.domain.card.dto.CardBaseInfoDTO;
+import com.hb.dokkan.service.domain.card.dto.EzaCardInfoDTO;
+import com.hb.dokkan.service.domain.card.dto.SkillDTO;
+import com.hb.dokkan.service.domain.card.dto.SpecialAttackDTO;
+import com.hb.dokkan.service.helper.EsCardSyncHelper;
 import com.hb.dokkan.service.job.sync.SyncDataService;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
@@ -31,7 +36,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.CollectionUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Future;
 
 /**
  * @Description 同步数据服务
@@ -62,6 +69,16 @@ public class SyncDataServiceImpl implements SyncDataService {
     @Resource(name = "defaultTransactionTemplate")
     private TransactionTemplate transactionTemplate;
 
+    @Resource
+    private DokkanThreadPoolExecutor dokkanThreadPoolExecutor;
+
+    @Resource
+    private DokkanEsCardMapper esCardMapper;
+
+    @Resource
+    private EsCardSyncHelper esCardSyncHelper;
+
+
     /**
      * 初始化卡片数据
      */
@@ -88,6 +105,54 @@ public class SyncDataServiceImpl implements SyncDataService {
             return null;
         });
         log.info("初始化完成");
+    }
+
+    /**
+     * 同步es卡片数据
+     */
+    @Override
+    public void syncEsCardData() {
+        if (!esCardMapper.existsIndex(DokkanEsCardMapper.INDEX_NAME)) {
+            Boolean createdIndex = esCardMapper.createIndex();
+            if (!createdIndex) {
+                log.error("创建es索引失败 indexName:{}", DokkanEsCardMapper.INDEX_NAME);
+                throw new DokkanBizException(ResponseErrorCode.CREATE_INDEX_ERROR);
+            }
+        }
+        Map<String, List<?>> dataMap = Maps.newHashMap();
+        // 并行查询card数据
+        Future<List<CardPO>> cardFuture = dokkanThreadPoolExecutor.submit(() -> cardRepository.list());
+        Future<List<EzaCardPO>> ezaCardFuture = dokkanThreadPoolExecutor.submit(() -> ezaCardRepository.list());
+        Future<List<SpecialPO>> specialFuture = dokkanThreadPoolExecutor.submit(() -> specialRepository.list());
+        Future<List<SkillPO>> skillFuture = dokkanThreadPoolExecutor.submit(() -> skillRepository.list());
+        try {
+            List<CardPO> cardPOS = cardFuture.get();
+            List<EzaCardPO> ezaCardPOS = ezaCardFuture.get();
+            List<SpecialPO> specialPOS = specialFuture.get();
+            List<SkillPO> skillPOS = skillFuture.get();
+            dataMap.put("card", cardPOS);
+            dataMap.put("ezaCard", ezaCardPOS);
+            dataMap.put("special", specialPOS);
+            dataMap.put("skill", skillPOS);
+        } catch (Exception e) {
+            log.error("query db data error :{}", e.getMessage(),e);
+            throw new DokkanBizException("query db data error :"+e.getMessage());
+        }
+        List<CardEsPO> esCards = esCardSyncHelper.buildEsCardPO(dataMap);
+        if (CollectionUtils.isEmpty(esCards)) {
+            log.error("构建es卡片索引失败");
+            return;
+        }
+        transactionTemplate.execute(status -> {
+            try{
+                Integer insetCnt = esCardMapper.insertBatch(esCards);
+                log.info("同步es卡片索引成功,insetCnt:{}", insetCnt);
+            }catch (Exception e){
+                log.error("SyncDataService#syncEsCardData error :{}", e.getMessage(),e);
+                status.setRollbackOnly();
+            }
+            return null;
+        });
     }
 
     private void insertSpecialInfo(List<SpecialAttackDTO> specialAttacks) {

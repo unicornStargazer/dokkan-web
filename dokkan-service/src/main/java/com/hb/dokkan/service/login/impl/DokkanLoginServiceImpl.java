@@ -1,7 +1,7 @@
 package com.hb.dokkan.service.login.impl;
 
 import com.hb.dokkan.common.domain.DokkanResponse;
-import com.hb.dokkan.infrastructure.login.DokkanLoginRepository;
+import com.hb.dokkan.infrastructure.mysql.login.DokkanLoginRepository;
 import com.hb.dokkan.service.login.DokkanLoginService;
 import com.hb.dokkan.service.login.domain.dto.LoginRequestDTO;
 import com.hb.dokkan.service.login.domain.dto.LoginResponseDTO;
