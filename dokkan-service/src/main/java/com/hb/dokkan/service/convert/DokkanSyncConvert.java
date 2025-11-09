@@ -6,6 +6,7 @@ import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
 import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
+import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
 import com.hb.dokkan.service.domain.card.dto.*;
 import com.hb.dokkan.service.domain.wiki.*;
 import com.hb.dokkan.service.enums.CardPropTypeEnum;
@@ -125,4 +126,8 @@ public interface DokkanSyncConvert {
         return DateUtils.day2Date(date);
     }
 
+    /**
+     * 链接 dto 转 po
+     */
+    List<DokkanLinkPO> convertToLinkPO(List<WikiLinkDTO> data);
 }

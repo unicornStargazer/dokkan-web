@@ -1,5 +1,6 @@
 package com.hb.dokkan.infrastructure.mysql.links.domain;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.hb.dokkan.common.domain.BasePO;
 import lombok.Data;
@@ -27,10 +28,12 @@ public class DokkanLinkPO extends BasePO {
     /**
      * 一级描述
      */
-    private String level_1_description;
+    @TableField("level_1_description")
+    private String level1Description;
     /**
      * 满级描述
      */
-    private String level_10_description;
+    @TableField("level_10_description")
+    private String level10Description;
 
 }

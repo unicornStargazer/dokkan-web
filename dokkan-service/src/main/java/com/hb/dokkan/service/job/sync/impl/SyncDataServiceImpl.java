@@ -16,6 +16,7 @@ import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
+import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.service.domain.card.bo.WikiCardBO;
 import com.hb.dokkan.service.domain.card.dto.CardBaseInfoDTO;
@@ -23,6 +24,7 @@ import com.hb.dokkan.service.domain.card.dto.EzaCardInfoDTO;
 import com.hb.dokkan.service.domain.card.dto.SkillDTO;
 import com.hb.dokkan.service.domain.card.dto.SpecialAttackDTO;
 import com.hb.dokkan.service.domain.wiki.WikiCategoryDTO;
+import com.hb.dokkan.service.domain.wiki.WikiLinkDTO;
 import com.hb.dokkan.service.helper.EsCardSyncHelper;
 import com.hb.dokkan.service.job.sync.SyncDataService;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
@@ -67,6 +69,9 @@ public class SyncDataServiceImpl implements SyncDataService {
 
     @Resource
     private DokkanCategoryRepository categoryRepository;
+
+    @Resource
+    private DokkanLinkRepository linkRepository;
 
     @Resource
     private DokkanSyncConvert convert;
@@ -129,8 +134,35 @@ public class SyncDataServiceImpl implements SyncDataService {
             try{
                 List<WikiCategoryDTO> data = distinctList(categoryData);
                 categoryRepository.saveBatch(convert.convertToCategoryPO(data));
+                log.info("初始化完成，分类数据{}条", data.size());
             }catch (Exception e){
                 log.error("SyncDataService#initCategories error :{}", e.getMessage(),e);
+                status.setRollbackOnly();
+            }
+            return null;
+        });
+    }
+
+    /**
+     * 初始化链接数据
+     */
+    @Override
+    public void initLinks() {
+        WikiInfoStrategy strategy = strategyFactory.getWikiStrategy(WikiInfoTypeEnum.LINK);
+        WikiContext context = new WikiContext();
+        strategy.execute(context);
+        List<WikiLinkDTO> linkData = context.getLinkData();
+        if (CollectionUtils.isEmpty(linkData)) {
+            log.error("初始化失败，获取链接为空");
+            return;
+        }
+        transactionTemplate.execute(status -> {
+            try{
+                List<WikiLinkDTO> data = distinctList(linkData);
+                linkRepository.saveBatch(convert.convertToLinkPO(data));
+                log.info("初始化完成，链接数据{}条", data.size());
+            }catch (Exception e){
+                log.error("SyncDataService#initLinks error :{}", e.getMessage(),e);
                 status.setRollbackOnly();
             }
             return null;

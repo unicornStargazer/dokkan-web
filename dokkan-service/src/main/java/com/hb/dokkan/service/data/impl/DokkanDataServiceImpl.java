@@ -71,5 +71,22 @@ public class DokkanDataServiceImpl implements DokkanDataService {
         return DokkanResponse.builder().success();
     }
 
+    /**
+     * 初始化链接数据
+     */
+    @Override
+    public DokkanResponse initLinks() {
+        try {
+            syncDataService.initLinks();
+        }catch (DokkanBizException e){
+            log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
+            return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
+        } catch (Exception e) {
+            log.error("DokkanDataServiceImpl#initLinks error,",e);
+            return DokkanResponse.builder().fail();
+        }
+        return DokkanResponse.builder().success();
+    }
+
 
 }

@@ -8,6 +8,7 @@ import com.hb.dokkan.common.http.RetryTemplate;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
 import com.hb.dokkan.service.domain.wiki.WikiCategoryDTO;
+import com.hb.dokkan.service.domain.wiki.WikiLinkDTO;
 import com.hb.dokkan.service.enums.SyncCardUrlEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +60,18 @@ public class WikiFacade {
                         null),
                 httpPoolProperties.getRetry(),
                 "getWikiCategory");
+    }
+
+    /**
+     * 获取全量分类信息
+     */
+    public List<WikiLinkDTO> getWikiLink() {
+        String url = SyncCardUrlEnum.WIKI_LINK.getUrl();
+        return RetryTemplate.executeWithRetrySliently(() ->
+                        httpClient.getForList(url, WikiLinkDTO.class,
+                                null),
+                httpPoolProperties.getRetry(),
+                "getWikiLink");
     }
 
     /**

@@ -46,5 +46,14 @@ public class DokkanDataApi {
     }
 
 
+    /**
+     * 初始化链接数据
+     */
+    @PostMapping("/init-link")
+    public DokkanResponse initLinks(){
+        return dataService.initLinks();
+    }
+
+
 
 }

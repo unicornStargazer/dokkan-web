@@ -21,4 +21,9 @@ public interface SyncDataService {
       * 初始化分类数据
       */
     void initCategories();
+
+     /**
+      * 初始化链接数据
+      */
+    void initLinks();
 }

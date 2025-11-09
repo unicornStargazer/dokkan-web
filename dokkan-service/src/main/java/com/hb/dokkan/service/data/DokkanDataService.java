@@ -22,4 +22,9 @@ public interface DokkanDataService {
       * 初始化分类数据
       */
     DokkanResponse initCategories();
+
+     /**
+      * 初始化链接数据
+      */
+    DokkanResponse initLinks();
 }
