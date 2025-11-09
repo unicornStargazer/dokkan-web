@@ -16,7 +16,9 @@ import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
+import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
 import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
+import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.service.domain.card.bo.WikiCardBO;
 import com.hb.dokkan.service.domain.card.dto.CardBaseInfoDTO;
@@ -43,6 +45,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Future;
+
+import static com.hb.dokkan.common.constants.DokkanConstants.*;
 
 /**
  * @Description 同步数据服务
@@ -187,15 +191,21 @@ public class SyncDataServiceImpl implements SyncDataService {
         Future<List<EzaCardPO>> ezaCardFuture = dokkanThreadPoolExecutor.submit(() -> ezaCardRepository.list());
         Future<List<SpecialPO>> specialFuture = dokkanThreadPoolExecutor.submit(() -> specialRepository.list());
         Future<List<SkillPO>> skillFuture = dokkanThreadPoolExecutor.submit(() -> skillRepository.list());
+        Future<List<DokkanLinkPO>> linkFuture = dokkanThreadPoolExecutor.submit(() -> linkRepository.list());
+        Future<List<DokkanCategoryPO>> categoryFuture = dokkanThreadPoolExecutor.submit(() -> categoryRepository.list());
         try {
             List<CardPO> cardPOS = cardFuture.get();
             List<EzaCardPO> ezaCardPOS = ezaCardFuture.get();
             List<SpecialPO> specialPOS = specialFuture.get();
             List<SkillPO> skillPOS = skillFuture.get();
-            dataMap.put("card", cardPOS);
-            dataMap.put("ezaCard", ezaCardPOS);
-            dataMap.put("special", specialPOS);
-            dataMap.put("skill", skillPOS);
+            List<DokkanLinkPO> linkPOS = linkFuture.get();
+            List<DokkanCategoryPO> categoryPOS = categoryFuture.get();
+            dataMap.put(CARD, cardPOS);
+            dataMap.put(EZA_CARD, ezaCardPOS);
+            dataMap.put(SPECIAL, specialPOS);
+            dataMap.put(SKILL, skillPOS);
+            dataMap.put(LINK, linkPOS);
+            dataMap.put(CATEGORY, categoryPOS);
         } catch (Exception e) {
             log.error("query db data error :{}", e.getMessage(),e);
             throw new DokkanBizException("query db data error :"+e.getMessage());
