@@ -1,6 +1,6 @@
 package com.hb.dokkan.common.exception.domain;
 
-import com.hb.dokkan.common.constants.ResponseErrorCode;
+import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import lombok.Getter;
 
 /**
@@ -11,14 +11,14 @@ import lombok.Getter;
 @Getter
 public class DokkanBizException extends RuntimeException{
 
-    private ResponseErrorCode error;
+    private ExceptionErrorCode error;
 
 
-    public DokkanBizException(ResponseErrorCode error) {
+    public DokkanBizException(ExceptionErrorCode error) {
         this.error = error;
     }
 
-    public DokkanBizException(ResponseErrorCode error, Throwable cause){
+    public DokkanBizException(ExceptionErrorCode error, Throwable cause){
         super(error.getErrorMsg(),cause);
         this.error = error;
     }

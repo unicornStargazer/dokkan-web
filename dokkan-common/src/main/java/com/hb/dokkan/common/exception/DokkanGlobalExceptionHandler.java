@@ -1,5 +1,6 @@
 package com.hb.dokkan.common.exception;
 
+import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.domain.DokkanResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +19,8 @@ public class DokkanGlobalExceptionHandler {
     @ExceptionHandler(DokkanBizException.class)
     public DokkanResponse dokkanBizExceptionHandler(DokkanBizException ex){
         log.error("biz exception,error:{},e",ex.getMessage(),ex.getCause());
-        return DokkanResponse.builder().fail(ex.getError());
+        ExceptionErrorCode error = ex.getError();
+        return DokkanResponse.builder().fail(error.getErrorCode(), error.getErrorMsg());
     }
 
 }

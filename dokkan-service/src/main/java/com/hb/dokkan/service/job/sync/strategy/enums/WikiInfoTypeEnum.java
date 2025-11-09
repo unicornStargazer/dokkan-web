@@ -14,6 +14,8 @@ public enum WikiInfoTypeEnum {
 
     CARD("卡片信息"),
 
+    CATEGORY("分类信息"),
+
     LINK("链接"),
 
     ;

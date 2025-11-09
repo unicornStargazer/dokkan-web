@@ -2,7 +2,7 @@ package com.hb.dokkan.service.job.sync.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Maps;
-import com.hb.dokkan.common.constants.ResponseErrorCode;
+import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.infrastructure.es.card.DokkanEsCardMapper;
@@ -15,12 +15,14 @@ import com.hb.dokkan.infrastructure.mysql.cards.domain.CardPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
+import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.service.domain.card.bo.WikiCardBO;
 import com.hb.dokkan.service.domain.card.dto.CardBaseInfoDTO;
 import com.hb.dokkan.service.domain.card.dto.EzaCardInfoDTO;
 import com.hb.dokkan.service.domain.card.dto.SkillDTO;
 import com.hb.dokkan.service.domain.card.dto.SpecialAttackDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCategoryDTO;
 import com.hb.dokkan.service.helper.EsCardSyncHelper;
 import com.hb.dokkan.service.job.sync.SyncDataService;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
@@ -62,6 +64,9 @@ public class SyncDataServiceImpl implements SyncDataService {
 
     @Resource
     private DokkanSpecialRepository specialRepository;
+
+    @Resource
+    private DokkanCategoryRepository categoryRepository;
 
     @Resource
     private DokkanSyncConvert convert;
@@ -108,6 +113,31 @@ public class SyncDataServiceImpl implements SyncDataService {
     }
 
     /**
+     * 初始化分类数据
+     */
+    @Override
+    public void initCategories() {
+        WikiInfoStrategy strategy = strategyFactory.getWikiStrategy(WikiInfoTypeEnum.CATEGORY);
+        WikiContext context = new WikiContext();
+        strategy.execute(context);
+        List<WikiCategoryDTO> categoryData = context.getCategoryData();
+        if (CollectionUtils.isEmpty(categoryData)) {
+            log.error("初始化失败，获取分类为空");
+            return;
+        }
+        transactionTemplate.execute(status -> {
+            try{
+                List<WikiCategoryDTO> data = distinctList(categoryData);
+                categoryRepository.saveBatch(convert.convertToCategoryPO(data));
+            }catch (Exception e){
+                log.error("SyncDataService#initCategories error :{}", e.getMessage(),e);
+                status.setRollbackOnly();
+            }
+            return null;
+        });
+    }
+
+    /**
      * 同步es卡片数据
      */
     @Override
@@ -116,7 +146,7 @@ public class SyncDataServiceImpl implements SyncDataService {
             Boolean createdIndex = esCardMapper.createIndex();
             if (!createdIndex) {
                 log.error("创建es索引失败 indexName:{}", DokkanEsCardMapper.INDEX_NAME);
-                throw new DokkanBizException(ResponseErrorCode.CREATE_INDEX_ERROR);
+                throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
             }
         }
         Map<String, List<?>> dataMap = Maps.newHashMap();
@@ -199,7 +229,7 @@ public class SyncDataServiceImpl implements SyncDataService {
             if (StringUtils.isAnyBlank(card.getTitle(), card.getCardName()) || !ObjectUtils.allNotNull(
                     card.getCardId(), card.getHpValue(), card.getAtkValue(), card.getDefValue())) {
                 log.error("param error,card:{}", JSON.toJSONString(card));
-                throw new DokkanBizException(ResponseErrorCode.INSERT_PARAM_ERROR);
+                throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR);
             }
         });
     }

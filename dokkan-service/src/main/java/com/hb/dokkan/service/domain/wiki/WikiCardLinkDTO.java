@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 /**
- * @Description link信息
+ * @Description card-link信息
  * @Author stargazer
  * @Date 2025/6/2 16:22
  **/
@@ -13,7 +13,7 @@ import lombok.*;
 @Setter
 @Builder
 @NoArgsConstructor
-public class WikiLinkDTO {
+public class WikiCardLinkDTO {
 
     /**
      * linkId

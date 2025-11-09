@@ -1,17 +1,17 @@
 package com.hb.dokkan.service.convert;
 
+import com.hb.dokkan.common.utils.DateUtils;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.CardPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
+import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
 import com.hb.dokkan.service.domain.card.dto.*;
-import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;
-import com.hb.dokkan.service.domain.wiki.WikiEzaCardDTO;
-import com.hb.dokkan.service.domain.wiki.WikiSkillDTO;
-import com.hb.dokkan.service.domain.wiki.WikiSpecialAttackDTO;
+import com.hb.dokkan.service.domain.wiki.*;
 import com.hb.dokkan.service.enums.CardPropTypeEnum;
 import org.mapstruct.*;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -109,4 +109,20 @@ public interface DokkanSyncConvert {
      * eza dto 转 po
      */
     List<SpecialPO> wikiSpecial2POList(List<SpecialAttackDTO> specialAttackDTOS);
+
+    /**
+     * 分类 dto 转 po
+     */
+    List<DokkanCategoryPO> convertToCategoryPO(List<WikiCategoryDTO> data);
+
+    @Mapping(target = "publishTime", qualifiedByName = "convertToDate" , source = "publishTime")
+    DokkanCategoryPO convertToCategoryPO(WikiCategoryDTO data);
+    /**
+     * 转换为日期
+     */
+    @Named("convertToDate")
+    default Date convertToDate(String date) {
+        return DateUtils.day2Date(date);
+    }
+
 }

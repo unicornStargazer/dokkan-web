@@ -2,7 +2,6 @@ package com.hb.dokkan.infrastructure.es.card.domain;
 
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
-import com.hb.dokkan.service.domain.card.dto.PotentialDTO;
 import lombok.Data;
 import org.dromara.easyes.annotation.IndexField;
 import org.dromara.easyes.annotation.IndexId;
@@ -130,7 +129,7 @@ public class CardEsPO implements Serializable {
      * 三围潜力值
      */
     @IndexField(fieldType = FieldType.NESTED)
-    private List<PotentialDTO> potentials;
+    private List<CardEsPotentialDTO> potentials;
 
     /**
      * 变身后cardId

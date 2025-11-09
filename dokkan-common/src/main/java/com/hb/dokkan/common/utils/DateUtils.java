@@ -31,4 +31,15 @@ public class DateUtils {
         return DATE_TIME_FORMAT.format(time);
     }
 
+    public static Date day2Date(String dateStr) {
+        if (ObjectUtils.isEmpty(dateStr)) {
+            return null;
+        }
+        try {
+            return DATE_FORMAT.parse(dateStr);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
 }

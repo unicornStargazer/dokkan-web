@@ -65,5 +65,12 @@ public final class DokkanResponse<T> implements Serializable {
             return this.response;
         }
 
+        public DokkanResponse<T> fail(String code, String message) {
+            this.response.setErrorCode(code);
+            this.response.setErrorMessage(message);
+            this.response.setSuccess(false);
+            return this.response;
+        }
+
     }
 }

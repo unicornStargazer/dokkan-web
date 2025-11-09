@@ -137,8 +137,8 @@ public class WikiCardHelper {
         WikiCardBaseInfoDTO card = wikiCard.getCard();
         CardBaseInfoAttribute attribute = convert.wikiCard2Attribute(card);
         attribute.setPotential(wikiCard.getPotential());
-        List<Long> categoryIds = wikiCard.getCategories().stream().map(WikiCategoryDTO::getId).toList();
-        List<Long> linkIds = wikiCard.getCardLinks().stream().map(WikiLinkDTO::getId).toList();
+        List<Long> categoryIds = wikiCard.getCategories().stream().map(WikiCardCategoryDTO::getId).toList();
+        List<Long> linkIds = wikiCard.getCardLinks().stream().map(WikiCardLinkDTO::getId).toList();
         attribute.setCategoryId(categoryIds);
         attribute.setLinkId(linkIds);
         if (!CollectionUtils.isEmpty(wikiCard.getTransformations())) {

@@ -1,13 +1,13 @@
-package com.hb.dokkan.service.cards;
+package com.hb.dokkan.service.data;
 
 import com.hb.dokkan.common.domain.DokkanResponse;
 
 /**
- * @Description
+ * @Description 数据服务
  * @Author stargazer
  * @Date 2025/6/2 21:40
  **/
-public interface DokkanCardDataService {
+public interface DokkanDataService {
     /**
      * 初始化卡片数据
      */
@@ -18,4 +18,8 @@ public interface DokkanCardDataService {
      */
     DokkanResponse syncEsCardData();
 
+     /**
+      * 初始化分类数据
+      */
+    DokkanResponse initCategories();
 }

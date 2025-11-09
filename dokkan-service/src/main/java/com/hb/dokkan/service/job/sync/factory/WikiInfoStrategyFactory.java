@@ -1,7 +1,7 @@
 package com.hb.dokkan.service.job.sync.factory;
 
 import com.alibaba.fastjson.JSON;
-import com.hb.dokkan.common.constants.ResponseErrorCode;
+import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
@@ -30,7 +30,7 @@ public class WikiInfoStrategyFactory {
             }
         }
         log.error("获取策略失败，type:{}", JSON.toJSONString(type));
-        throw new DokkanBizException(ResponseErrorCode.HAS_NO_STRATEGY);
+        throw new DokkanBizException(ExceptionErrorCode.HAS_NO_STRATEGY);
     }
 
 }

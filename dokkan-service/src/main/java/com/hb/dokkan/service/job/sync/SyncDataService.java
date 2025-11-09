@@ -17,4 +17,8 @@ public interface SyncDataService {
      */
     void syncEsCardData();
 
+     /**
+      * 初始化分类数据
+      */
+    void initCategories();
 }

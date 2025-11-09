@@ -36,7 +36,7 @@ public class WikiCardDTO {
     /**
      * 分类
      */
-    private List<WikiCategoryDTO> categories;
+    private List<WikiCardCategoryDTO> categories;
 
     /**
      * 必杀
@@ -52,7 +52,7 @@ public class WikiCardDTO {
      * 链接
      */
     @JsonProperty("card_links")
-    private List<WikiLinkDTO> cardLinks;
+    private List<WikiCardLinkDTO> cardLinks;
 
     /**
      * 变身相关

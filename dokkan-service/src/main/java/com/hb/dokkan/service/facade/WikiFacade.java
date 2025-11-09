@@ -1,12 +1,13 @@
 package com.hb.dokkan.service.facade;
 
 import com.google.common.collect.Lists;
-import com.hb.dokkan.common.constants.ResponseErrorCode;
+import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.common.http.CommonHttpClient;
 import com.hb.dokkan.common.http.RetryTemplate;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.service.domain.wiki.WikiCardDTO;
+import com.hb.dokkan.service.domain.wiki.WikiCategoryDTO;
 import com.hb.dokkan.service.enums.SyncCardUrlEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,19 @@ public class WikiFacade {
         }, httpPoolProperties.getRetry(), "getWikiCard-cardId:" + cardId);
     }
 
+
+    /**
+     * 获取全量分类信息
+     */
+    public List<WikiCategoryDTO> getWikiCategory() {
+        String url = SyncCardUrlEnum.WIKI_CATEGORY.getUrl();
+        return RetryTemplate.executeWithRetrySliently(() ->
+                httpClient.getForList(url, WikiCategoryDTO.class,
+                        null),
+                httpPoolProperties.getRetry(),
+                "getWikiCategory");
+    }
+
     /**
      * 获取最新html
      */
@@ -68,7 +82,7 @@ public class WikiFacade {
         cardIds.parallelStream().forEach(cardId -> {
             WikiCardDTO card = getWikiCard(cardId);
             if (Objects.isNull(card)) {
-                throw new DokkanBizException(ResponseErrorCode.GET_WIKI_INFO_ERROR);
+                throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
             }
             wikiCards.add(card);
         });
