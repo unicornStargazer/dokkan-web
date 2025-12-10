@@ -84,6 +84,16 @@ public class CardBaseInfoAttribute implements Serializable {
     private List<Long> linkId;
 
     /**
+     * 待机技能id
+     */
+    private List<Integer> standBySkillIds;
+
+    /**
+     * 下拉完成技能id
+     */
+    private List<Integer> finishSkillIds;
+
+    /**
      * 三围潜力值
      */
     private List<PotentialDTO> potential;
@@ -92,6 +102,11 @@ public class CardBaseInfoAttribute implements Serializable {
      * 变身后信息
      */
     private List<CardTransformationDTO.NextCardDTO> nextCards;
+
+    /**
+     * 必杀id
+     */
+    private List<Long> specialSkillIds;
 
     @Override
     public boolean equals(Object object) {

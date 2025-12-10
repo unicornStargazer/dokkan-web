@@ -128,7 +128,7 @@ public class CardEsPO implements Serializable {
     /**
      * 三围潜力值
      */
-    @IndexField(fieldType = FieldType.NESTED)
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = CardEsPotentialDTO.class)
     private List<CardEsPotentialDTO> potentials;
 
     /**
@@ -160,6 +160,11 @@ public class CardEsPO implements Serializable {
      */
     private Date ezaPublishTime;
 
+    /**
+     * 超极限发布时间
+     */
+    private Date superEzaPublishTime;
+
      /**
      * 极限队长技
      */
@@ -184,7 +189,7 @@ public class CardEsPO implements Serializable {
     /**
      * 必杀信息
      */
-    @IndexField(fieldType = FieldType.NESTED)
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = SpecialPO.class)
     private List<SpecialPO> specialSkills;
 
 
@@ -193,10 +198,16 @@ public class CardEsPO implements Serializable {
     /******************* 下拉/待机技能-start *******************/
 
     /**
-     * 下拉技能
+     * 待机技能
      */
-    @IndexField(fieldType = FieldType.NESTED)
-    private List<SkillPO> downPullSkills;
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = SkillPO.class)
+    private List<SkillPO> standBySkills;
+
+    /**
+     * 待机完成技能
+     */
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = SpecialPO.class)
+    private List<SkillPO> finishSkills;
 
 
     /******************* 下拉/待机技能-end *******************/
@@ -204,7 +215,7 @@ public class CardEsPO implements Serializable {
     /**
      * 扩展属性
      */
-    @IndexField(fieldType = FieldType.NESTED)
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = CardEsAttribute.class)
     private List<CardEsAttribute> attributes;
 
 }

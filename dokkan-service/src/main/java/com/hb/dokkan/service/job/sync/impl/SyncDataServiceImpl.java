@@ -107,13 +107,13 @@ public class SyncDataServiceImpl implements SyncDataService {
             return;
         }
         transactionTemplate.execute(status -> {
-            try{
+            try {
                 insertCardBaseInfo(cardData.getCardBaseData());
                 insertDownPullSkillInfo(cardData.getDownPullSkills());
                 insertEzaCardInfo(cardData.getEzaCardInfos());
                 insertSpecialInfo(cardData.getSpecialAttacks());
-            }catch (Exception e){
-                log.error("SyncDataService#initCard error :{}", e.getMessage(),e);
+            } catch (Exception e) {
+                log.error("SyncDataService#initCard error :{}", e.getMessage(), e);
                 status.setRollbackOnly();
             }
             return null;
@@ -135,12 +135,12 @@ public class SyncDataServiceImpl implements SyncDataService {
             return;
         }
         transactionTemplate.execute(status -> {
-            try{
+            try {
                 List<WikiCategoryDTO> data = distinctList(categoryData);
                 categoryRepository.saveBatch(convert.convertToCategoryPO(data));
                 log.info("初始化完成，分类数据{}条", data.size());
-            }catch (Exception e){
-                log.error("SyncDataService#initCategories error :{}", e.getMessage(),e);
+            } catch (Exception e) {
+                log.error("SyncDataService#initCategories error :{}", e.getMessage(), e);
                 status.setRollbackOnly();
             }
             return null;
@@ -161,12 +161,12 @@ public class SyncDataServiceImpl implements SyncDataService {
             return;
         }
         transactionTemplate.execute(status -> {
-            try{
+            try {
                 List<WikiLinkDTO> data = distinctList(linkData);
                 linkRepository.saveBatch(convert.convertToLinkPO(data));
                 log.info("初始化完成，链接数据{}条", data.size());
-            }catch (Exception e){
-                log.error("SyncDataService#initLinks error :{}", e.getMessage(),e);
+            } catch (Exception e) {
+                log.error("SyncDataService#initLinks error :{}", e.getMessage(), e);
                 status.setRollbackOnly();
             }
             return null;
@@ -178,12 +178,10 @@ public class SyncDataServiceImpl implements SyncDataService {
      */
     @Override
     public void syncEsCardData() {
-        if (!esCardMapper.existsIndex(DokkanEsCardMapper.INDEX_NAME)) {
-            Boolean createdIndex = esCardMapper.createIndex();
-            if (!createdIndex) {
-                log.error("创建es索引失败 indexName:{}", DokkanEsCardMapper.INDEX_NAME);
-                throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
-            }
+        Boolean createdIndex = esCardMapper.createIndex();
+        if (!createdIndex) {
+            log.error("创建es索引失败 indexName:{}", DokkanEsCardMapper.INDEX_NAME);
+            throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
         }
         Map<String, List<?>> dataMap = Maps.newHashMap();
         // 并行查询card数据
@@ -207,8 +205,8 @@ public class SyncDataServiceImpl implements SyncDataService {
             dataMap.put(LINK, linkPOS);
             dataMap.put(CATEGORY, categoryPOS);
         } catch (Exception e) {
-            log.error("query db data error :{}", e.getMessage(),e);
-            throw new DokkanBizException("query db data error :"+e.getMessage());
+            log.error("query db data error :{}", e.getMessage(), e);
+            throw new DokkanBizException("query db data error :" + e.getMessage());
         }
         List<CardEsPO> esCards = esCardSyncHelper.buildEsCardPO(dataMap);
         if (CollectionUtils.isEmpty(esCards)) {
@@ -216,11 +214,11 @@ public class SyncDataServiceImpl implements SyncDataService {
             return;
         }
         transactionTemplate.execute(status -> {
-            try{
+            try {
                 Integer insetCnt = esCardMapper.insertBatch(esCards);
                 log.info("同步es卡片索引成功,insetCnt:{}", insetCnt);
-            }catch (Exception e){
-                log.error("SyncDataService#syncEsCardData error :{}", e.getMessage(),e);
+            } catch (Exception e) {
+                log.error("SyncDataService#syncEsCardData error :{}", e.getMessage(), e);
                 status.setRollbackOnly();
             }
             return null;

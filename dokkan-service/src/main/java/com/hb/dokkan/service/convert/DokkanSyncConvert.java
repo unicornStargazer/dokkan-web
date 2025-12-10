@@ -77,6 +77,9 @@ public interface DokkanSyncConvert {
      */
     List<EzaCardInfoDTO> wikiCard2EzaDtoList(List<WikiEzaCardDTO> ezaCardInfos);
 
+    @Mappings(
+            @Mapping(source = "openAt",target = "publishTime")
+    )
     EzaCardInfoDTO wikiCard2EzaDto(WikiEzaCardDTO ezaCardInfo);
 
     /**

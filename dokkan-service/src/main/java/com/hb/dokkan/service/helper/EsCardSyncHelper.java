@@ -1,20 +1,25 @@
 package com.hb.dokkan.service.helper;
 
+import com.google.common.collect.Lists;
 import com.hb.dokkan.common.utils.IdGeneratorUtil;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.infrastructure.es.card.domain.CardEsPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.CardPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
+import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
 import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
 import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
+import com.hb.dokkan.service.convert.DokkanEsSyncConvert;
 import com.hb.dokkan.service.domain.card.dto.CardBaseInfoAttribute;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static com.hb.dokkan.common.constants.DokkanConstants.*;
 
@@ -27,6 +32,9 @@ import static com.hb.dokkan.common.constants.DokkanConstants.*;
 @Slf4j
 public class EsCardSyncHelper {
 
+    @Resource
+    private DokkanEsSyncConvert dokkanEsSyncConvert;
+
     /**
      * 构建es卡片po
      */
@@ -35,11 +43,15 @@ public class EsCardSyncHelper {
         List<CardPO> cards = (List<CardPO>) dataMap.get(CARD);
         List<DokkanCategoryPO> categories = (List<DokkanCategoryPO>) dataMap.get(CATEGORY);
         List<DokkanLinkPO> links = (List<DokkanLinkPO>) dataMap.get(LINK);
+        List<EzaCardPO> ezaCardPOS = (List<EzaCardPO>) dataMap.get(EZA_CARD);
+        List<SpecialPO> specialPOS = (List<SpecialPO>) dataMap.get(SPECIAL);
+        List<SkillPO> skillPOS = (List<SkillPO>) dataMap.get(SKILL);
         if (CollectionUtils.isEmpty(cards)) {
             return esCards;
         }
-        for (CardPO card : cards) {
+        cards.forEach(card -> {
             CardEsPO esCardPO = new CardEsPO();
+            esCards.add(esCardPO);
             esCardPO.setId(IdGeneratorUtil.generate16CharUuidSimple());
             esCardPO.setCardId(card.getCardId());
             esCardPO.setCardName(card.getCardName());
@@ -51,12 +63,108 @@ public class EsCardSyncHelper {
             esCardPO.setDefValue(card.getDefValue());
             esCardPO.setAtkValue(card.getAtkValue());
             esCardPO.setPublishTime(card.getPublishTime());
-            esCards.add(esCardPO);
             CardBaseInfoAttribute attribute = JsonUtils.json2Object(card.getAttributes(), CardBaseInfoAttribute.class);
+            // card扩展信息
             buildCardBaseAttr(esCardPO, attribute, links, categories);
-        }
 
-        return null;
+            // card极限信息
+            buildEzaInfo(esCardPO, ezaCardPOS);
+
+            // card必杀信息
+            buildSuperInfo(esCardPO, specialPOS, attribute);
+
+            // card技能信息
+            buildSkillInfo(esCardPO, skillPOS, attribute);
+        });
+        return esCards;
+    }
+
+    /**
+     * 构建卡片技能信息
+     */
+    private void buildSkillInfo(CardEsPO esCardPO, List<SkillPO> skillPOS, CardBaseInfoAttribute attribute) {
+        if (CollectionUtils.isEmpty(skillPOS)) {
+            log.error("skill数据查询失败");
+            return;
+        }
+        Map<String, SkillPO> skillPOMap = skillPOS.stream()
+                .collect(Collectors.toMap(SkillPO::getSkillId, Function.identity(), (oldValue, newValue) -> newValue));
+        if (!CollectionUtils.isEmpty(attribute.getStandBySkillIds()))  {
+            List<SkillPO> standBySkills = Lists.newArrayList();
+            esCardPO.setStandBySkills(standBySkills);
+            attribute.getStandBySkillIds().forEach(skillId -> {
+                SkillPO skillPO = skillPOMap.get(skillId.toString());
+                if (Objects.nonNull(skillPO)) {
+                    standBySkills.add(skillPO);
+                }
+            });
+        }
+        if (!CollectionUtils.isEmpty(attribute.getFinishSkillIds()))  {
+            List<SkillPO> finishSkills = Lists.newArrayList();
+            esCardPO.setFinishSkills(finishSkills);
+            attribute.getFinishSkillIds().forEach(finishSkillId -> {
+                SkillPO skillPO = skillPOMap.get(finishSkillId.toString());
+                if (Objects.nonNull(skillPO)) {
+                    finishSkills.add(skillPO);
+                }
+            });
+        }
+    }
+
+    /**
+     * 必杀信息构建
+     */
+    private void buildSuperInfo(CardEsPO esCardPO, List<SpecialPO> specialPOS, CardBaseInfoAttribute attribute) {
+        if (CollectionUtils.isEmpty(specialPOS) || Objects.isNull(attribute))  {
+            log.error("cardId:{} 没有必杀信息", esCardPO.getCardId());
+            return;
+        }
+        Map<Long, SpecialPO> specialMap = specialPOS.stream()
+                .collect(Collectors.toMap(SpecialPO::getSpecialId, Function.identity(), (oldValue, newValue) -> newValue));
+        if (!CollectionUtils.isEmpty(attribute.getSpecialSkillIds()))  {
+            List<SpecialPO> specialSkills = Lists.newArrayList();
+            esCardPO.setSpecialSkills(specialSkills);
+            attribute.getSpecialSkillIds().forEach(specialId -> {
+                SpecialPO specialPO = specialMap.get(specialId);
+                if (Objects.nonNull(specialPO)) {
+                    specialSkills.add(specialPO);
+                }
+            });
+        }
+    }
+
+    /**
+     * 构建卡片极限信息
+     */
+    private void buildEzaInfo(CardEsPO esCardPO, List<EzaCardPO> ezaCardPOS) {
+        if (CollectionUtils.isEmpty(ezaCardPOS)) {
+            esCardPO.setEzaFlag(false);
+            esCardPO.setSuperEzaFlag(false);
+        }
+        List<EzaCardPO> currentEzaCards = ezaCardPOS.stream()
+                .filter(ezaCardPO -> esCardPO.getCardId().equals(ezaCardPO.getCardId()))
+                .sorted(Comparator.comparing(EzaCardPO::getStep))
+                .toList();
+        if (CollectionUtils.isEmpty(currentEzaCards)) {
+            esCardPO.setEzaFlag(false);
+            esCardPO.setSuperEzaFlag(false);
+        }
+        esCardPO.setEzaFlag(true);
+        esCardPO.setSuperEzaFlag(currentEzaCards.size() > 1);
+        for (int i = 0; i < currentEzaCards.size(); i++) {
+            EzaCardPO ezaCardPO = currentEzaCards.get(i);
+            esCardPO.setEzaHpValue(ezaCardPO.getHpValue());
+            esCardPO.setEzaDefValue(ezaCardPO.getDefValue());
+            esCardPO.setEzaAtkValue(ezaCardPO.getAtkValue());
+            if (i < 1) {
+                esCardPO.setEzaPublishTime(ezaCardPO.getPublishTime());
+                esCardPO.setEzaLeaderSkill(ezaCardPO.getLeaderSkill());
+                esCardPO.setEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
+            } else {
+                esCardPO.setSuperEzaPublishTime(ezaCardPO.getPublishTime());
+                esCardPO.setSuperEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
+            }
+        }
     }
 
     /**
@@ -74,6 +182,13 @@ public class EsCardSyncHelper {
         esCardPO.setCarnivalFlag(attributes.getCarnivalFlag());
         esCardPO.setCategories(buildCategoryNames(categories, attributes.getCategoryId()));
         esCardPO.setLinks(buildLinkName(links, attributes.getLinkId()));
+        esCardPO.setPotentials(dokkanEsSyncConvert.convert2PotentialDTO(attributes.getPotential()));
+        if (!CollectionUtils.isEmpty(attributes.getNextCards())) {
+            attributes.getNextCards().stream()
+                    .filter(nextCard -> esCardPO.getCardId().equals(nextCard.getBaseId()))
+                    .findAny()
+                    .ifPresent(nextCard -> esCardPO.setNextCardId(nextCard.getId()));
+        }
     }
 
     private String buildLinkName(List<DokkanLinkPO> links, List<Long> linkId) {

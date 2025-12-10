@@ -101,7 +101,7 @@ public class WikiCardHelper {
                 curCardEzaDTO.setDokkanFesFlag(wikiCardDTO.getCard().getDokkanFesFlag());
                 curCardEzaDTO.setPropType(wikiCardDTO.getCard().getPropType());
                 curCardEzaDTO.setType(CardPropTypeEnum.getProp(curCardEzaDTO.getPropType()));
-                curCardEzaDTO.setPublishTime(wikiCardDTO.getCard().getOpenAt());
+                curCardEzaDTO.setPublishTime(curCardEzaDTO.getPublishTime());
                 curCardEzaDTO.setRarity(wikiCardDTO.getCard().getRarity());
                 curCardEzaDTO.setAttributes(buildEzaAttributes(curCardEzaDTO));
             });
@@ -139,8 +139,14 @@ public class WikiCardHelper {
         attribute.setPotential(wikiCard.getPotential());
         List<Long> categoryIds = wikiCard.getCategories().stream().map(WikiCardCategoryDTO::getId).toList();
         List<Long> linkIds = wikiCard.getCardLinks().stream().map(WikiCardLinkDTO::getId).toList();
+        List<Integer> standBySkillIds = wikiCard.getStandbySkills().stream().map(WikiSkillDTO::getId).toList();
+        List<Integer> finishSkillIds = wikiCard.getFinishSkills().stream().map(WikiSkillDTO::getId).toList();
+        List<Long> specialIds = wikiCard.getSpecials().stream().map(WikiSpecialAttackDTO::getId).toList();
         attribute.setCategoryId(categoryIds);
         attribute.setLinkId(linkIds);
+        attribute.setStandBySkillIds(standBySkillIds);
+        attribute.setFinishSkillIds(finishSkillIds);
+        attribute.setSpecialSkillIds(specialIds);
         if (!CollectionUtils.isEmpty(wikiCard.getTransformations())) {
             List<CardTransformationDTO.NextCardDTO> nextCardDTOS = wikiCard.getTransformations().stream().map(CardTransformationDTO::getNextCard).toList();
             attribute.setNextCards(nextCardDTOS);
