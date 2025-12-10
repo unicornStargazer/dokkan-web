@@ -6,7 +6,7 @@ import lombok.Getter;
 import java.util.Objects;
 
 /**
- * @Description xxxxx
+ * @Description 稀有度枚举
  * @Author stargazer
  * @Date 2025/6/2 17:16
  **/

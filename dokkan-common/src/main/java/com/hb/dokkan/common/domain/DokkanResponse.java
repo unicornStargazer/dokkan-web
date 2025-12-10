@@ -8,7 +8,7 @@ import org.apache.commons.lang3.ObjectUtils;
 import java.io.Serializable;
 
 /**
- * @Description xxxxx
+ * @Description 通用响应类
  * @Author stargazer
  * @Date 2025/3/9 18:21
  **/
