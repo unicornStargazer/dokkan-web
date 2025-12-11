@@ -7,7 +7,7 @@ import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.common.utils.TranslationUtils;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
-import com.hb.dokkan.service.domain.card.bo.WikiCardBO;
+import com.hb.dokkan.service.domain.cards.bo.WikiCardBO;
 import com.hb.dokkan.service.domain.wiki.AwakeningInfoDTO;
 import com.hb.dokkan.service.domain.wiki.CardInfoSyncCardDTO;
 import com.hb.dokkan.service.domain.wiki.WikiCardBaseInfoDTO;

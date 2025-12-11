@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.domain.card.dto;
+package com.hb.dokkan.service.domain.cards.dto;
 
 import com.hb.dokkan.common.utils.JsonUtils;
 import lombok.Data;

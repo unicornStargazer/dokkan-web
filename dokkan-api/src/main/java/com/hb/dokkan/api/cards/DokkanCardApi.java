@@ -4,7 +4,10 @@ import com.hb.dokkan.api.cards.domain.request.CardQueryRequest;
 import com.hb.dokkan.api.cards.domain.response.CardListResponse;
 import com.hb.dokkan.common.domain.DokkanResponse;
 import com.hb.dokkan.common.domain.PageResponse;
+import com.hb.dokkan.service.cards.DokkanCardService;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,8 +22,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/cards")
 public class DokkanCardApi {
 
+    @Resource
+    private DokkanCardService cardService;
+
+    /**
+     * 卡片列表
+     */
+    @PostMapping("/list")
     public DokkanResponse<PageResponse<CardListResponse>> cardList(@RequestBody CardQueryRequest request){
-        return null;
+        return DokkanResponse.<PageResponse<CardListResponse>>builder().withModel(cardService.cardList(request)).build();
     }
 
     

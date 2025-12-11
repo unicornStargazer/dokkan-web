@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.domain.card.dto;
+package com.hb.dokkan.service.domain.cards.dto;
 
 import com.google.common.base.Objects;
 import com.hb.dokkan.common.utils.JsonUtils;

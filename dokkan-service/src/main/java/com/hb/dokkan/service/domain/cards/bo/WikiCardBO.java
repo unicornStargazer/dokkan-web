@@ -1,9 +1,9 @@
-package com.hb.dokkan.service.domain.card.bo;
+package com.hb.dokkan.service.domain.cards.bo;
 
-import com.hb.dokkan.service.domain.card.dto.CardBaseInfoDTO;
-import com.hb.dokkan.service.domain.card.dto.EzaCardInfoDTO;
-import com.hb.dokkan.service.domain.card.dto.SkillDTO;
-import com.hb.dokkan.service.domain.card.dto.SpecialAttackDTO;
+import com.hb.dokkan.service.domain.cards.dto.CardBaseInfoDTO;
+import com.hb.dokkan.service.domain.cards.dto.EzaCardInfoDTO;
+import com.hb.dokkan.service.domain.cards.dto.SkillDTO;
+import com.hb.dokkan.service.domain.cards.dto.SpecialAttackDTO;
 import lombok.Data;
 
 import java.io.Serializable;

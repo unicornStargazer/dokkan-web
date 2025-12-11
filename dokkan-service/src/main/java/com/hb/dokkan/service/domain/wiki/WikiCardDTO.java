@@ -1,7 +1,7 @@
 package com.hb.dokkan.service.domain.wiki;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.hb.dokkan.service.domain.card.dto.PotentialDTO;
+import com.hb.dokkan.service.domain.cards.dto.PotentialDTO;
 import lombok.*;
 
 import java.util.List;

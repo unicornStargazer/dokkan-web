@@ -11,7 +11,7 @@ import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
 import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
 import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
 import com.hb.dokkan.service.convert.DokkanEsSyncConvert;
-import com.hb.dokkan.service.domain.card.dto.CardBaseInfoAttribute;
+import com.hb.dokkan.service.domain.cards.dto.CardBaseInfoAttribute;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

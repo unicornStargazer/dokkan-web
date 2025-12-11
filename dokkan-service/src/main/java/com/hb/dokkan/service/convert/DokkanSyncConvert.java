@@ -7,7 +7,7 @@ import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
 import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
 import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
-import com.hb.dokkan.service.domain.card.dto.*;
+import com.hb.dokkan.service.domain.cards.dto.*;
 import com.hb.dokkan.service.domain.wiki.*;
 import com.hb.dokkan.service.enums.CardPropTypeEnum;
 import org.mapstruct.*;

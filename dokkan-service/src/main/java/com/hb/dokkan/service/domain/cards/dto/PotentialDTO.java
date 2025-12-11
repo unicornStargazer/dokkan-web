@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.domain.card.dto;
+package com.hb.dokkan.service.domain.cards.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;

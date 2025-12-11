@@ -1,7 +1,7 @@
 package com.hb.dokkan.service.convert;
 
 import com.hb.dokkan.infrastructure.es.card.domain.CardEsPotentialDTO;
-import com.hb.dokkan.service.domain.card.dto.PotentialDTO;
+import com.hb.dokkan.service.domain.cards.dto.PotentialDTO;
 import org.mapstruct.Builder;
 import org.mapstruct.Mapper;
 
