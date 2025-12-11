@@ -5,7 +5,7 @@ import com.google.common.collect.Maps;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
-import com.hb.dokkan.infrastructure.es.card.DokkanEsCardMapper;
+import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
 import com.hb.dokkan.infrastructure.es.card.domain.CardEsPO;
 import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
 import com.hb.dokkan.infrastructure.mysql.cards.DokkanEzaCardRepository;

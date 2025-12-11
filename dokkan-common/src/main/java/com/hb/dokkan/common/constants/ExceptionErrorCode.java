@@ -20,6 +20,8 @@ public enum ExceptionErrorCode {
 
     CREATE_INDEX_ERROR("980813","创建es索引失败"),
 
+    QUERY_PARAM_ERROR("980814", "查询参数错误"),
+
     ;
 
     private final String errorCode;

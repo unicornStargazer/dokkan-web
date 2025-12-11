@@ -1,6 +1,9 @@
 package com.hb.dokkan.service.cards;
 
-import com.hb.dokkan.common.domain.PageResponse;
+import com.hb.dokkan.service.domain.cards.query.CardQueryOption;
+import com.hb.dokkan.service.domain.cards.vo.CardListVO;
+
+import java.util.List;
 
 /**
  * @Description 卡片服务
@@ -8,5 +11,8 @@ import com.hb.dokkan.common.domain.PageResponse;
  * @Date 2025/12/10 22:32
  **/
 public interface DokkanCardService {
-    PageResponse<com.hb.dokkan.api.cards.domain.response.CardListResponse> cardList(com.hb.dokkan.api.cards.domain.request.CardQueryRequest request);
+    /**
+     * 查询卡片列表
+     */
+    List<CardListVO> cardList(CardQueryOption queryOption);
 }

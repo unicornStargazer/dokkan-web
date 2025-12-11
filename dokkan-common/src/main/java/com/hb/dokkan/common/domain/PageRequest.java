@@ -14,11 +14,11 @@ public class PageRequest implements Serializable {
     /**
      * 页码
      */
-    private int pageNum = 1;
+    private Integer pageNum;
 
     /**
      * 每页数量
      */
-    private int pageSize = 10;
+    private Integer pageSize;
 
 }

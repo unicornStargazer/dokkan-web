@@ -1,4 +1,4 @@
-package com.hb.dokkan.infrastructure.es.card;
+package com.hb.dokkan.infrastructure.es.card.mapper;
 
 import com.hb.dokkan.infrastructure.es.card.domain.CardEsPO;
 import org.dromara.easyes.core.kernel.BaseEsMapper;

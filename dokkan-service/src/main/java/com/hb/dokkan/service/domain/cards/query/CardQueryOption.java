@@ -1,33 +1,35 @@
-package com.hb.dokkan.api.cards.domain.request;
+package com.hb.dokkan.service.domain.cards.query;
 
-import com.hb.dokkan.common.domain.PageRequest;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @Description 卡片查询参数
  * @Author stargazer
- * @Date 2025/12/10 22:16
+ * @Date 2025/12/11 22:49
  **/
-@EqualsAndHashCode(callSuper = true)
 @Data
-public class CardQueryRequest extends PageRequest implements Serializable {
-    private static final long serialVersionUID = -8967595314460731405L;
+public class CardQueryOption implements Serializable {
     /**
-     * 卡片id
+     * 页码
      */
-    private Long cardId;
+    private Integer pageNum;
 
-
-    /************************* 卡片列表查询条件 *************************/
-
+    /**
+     * 每页数量
+     */
+    private Integer pageSize;
     /**
      * 卡片名称
      */
     private String cardName;
+    /**
+     * 卡片id
+     */
+    private Long cardId;
     /**
      * 属性名称
      * @see com.hb.dokkan.service.enums.CardPropTypeEnum
@@ -45,6 +47,7 @@ public class CardQueryRequest extends PageRequest implements Serializable {
      */
     private String rarity;
 
+
     /**
      * 链接id列表
      */
@@ -55,7 +58,19 @@ public class CardQueryRequest extends PageRequest implements Serializable {
      */
     private List<Integer> categoryIds;
 
-    /************************* 卡片列表查询条件 *************************/
-
+    /**
+     * 初始化分页参数
+     */
+    public void initPageable() {
+        if (Objects.nonNull(pageNum) && Objects.nonNull(pageSize)) {
+            return;
+        }
+        if (Objects.isNull(pageNum)) {
+            pageNum = 1;
+        }
+        if (Objects.isNull(pageSize)) {
+            pageSize = 50;
+        }
+    }
 
 }
