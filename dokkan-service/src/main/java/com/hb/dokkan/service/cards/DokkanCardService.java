@@ -31,5 +31,6 @@ public class DokkanCardService{
 //            return dokkanEsCardRepository.cardList(queryOption);
             return null;
         }
-        return null;     }
+        return null;
+    }
 }
