@@ -10,10 +10,11 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="dokkan-config" />
-        <module name="dokkan-api" />
         <module name="dokkan-common" />
-        <module name="dokkan-service" />
         <module name="dokkan-infrastructure" />
+        <module name="dokkan-api" />
+        <module name="dokkan-dependencies" />
+        <module name="dokkan-service" />
         <module name="dokkan-starter" />
       </profile>
     </annotationProcessing>

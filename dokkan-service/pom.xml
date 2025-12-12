@@ -15,21 +15,64 @@
         <!--内部依赖  start-->
         <dependency>
             <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-api</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-common</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-config</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-infrastructure</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-common</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-common</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
             <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-config</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-common</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!--内部依赖  end-->
-
-        <!-- 解析html start -->
-        <dependency>
-            <groupId>org.jsoup</groupId>
-            <artifactId>jsoup</artifactId>
-        </dependency>
-        <!-- 解析html end -->
     </dependencies>
 
 </project>

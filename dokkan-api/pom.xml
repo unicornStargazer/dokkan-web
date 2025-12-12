@@ -15,7 +15,33 @@
         <!--内部依赖  start-->
         <dependency>
             <groupId>com.hb.dokkan</groupId>
-            <artifactId>dokkan-service</artifactId>
+            <artifactId>dokkan-config</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-common</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-dependencies</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-common</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!--内部依赖  end-->
 

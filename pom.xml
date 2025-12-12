@@ -33,27 +33,37 @@
             <!--内部依赖 start-->
             <dependency>
                 <groupId>com.hb.dokkan</groupId>
-                <artifactId>dokkan-common</artifactId>
+                <artifactId>dokkan-api</artifactId>
                 <version>${dokkan.version}</version>
             </dependency>
-            <dependency>
-                <groupId>com.hb.dokkan</groupId>
-                <artifactId>dokkan-infrastructure</artifactId>
-                <version>${dokkan.version}</version>
-            </dependency>
+
             <dependency>
                 <groupId>com.hb.dokkan</groupId>
                 <artifactId>dokkan-service</artifactId>
                 <version>${dokkan.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.hb.dokkan</groupId>
-                <artifactId>dokkan-api</artifactId>
+                <artifactId>dokkan-infrastructure</artifactId>
                 <version>${dokkan.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>com.hb.dokkan</groupId>
                 <artifactId>dokkan-config</artifactId>
+                <version>${dokkan.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.hb.dokkan</groupId>
+                <artifactId>dokkan-common</artifactId>
+                <version>${dokkan.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.hb.dokkan</groupId>
+                <artifactId>dokkan-dependencies</artifactId>
                 <version>${dokkan.version}</version>
             </dependency>
             <!--内部依赖 end-->
@@ -208,6 +218,7 @@
         <module>dokkan-starter</module>
         <module>dokkan-service</module>
         <module>dokkan-infrastructure</module>
+        <module>dokkan-dependencies</module>
     </modules>
 
 

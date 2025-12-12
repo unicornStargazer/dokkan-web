@@ -35,7 +35,9 @@ public class DokkanCardServiceImpl implements DokkanCardService {
         //  初始化分页参数 兜底不传分页参数导致查询数据过多
         queryOption.initPageable();
         if (CollectionUtils.isEmpty(queryOption.getCategoryIds()) || CollectionUtils.isEmpty(queryOption.getLinkIds())) {
-            return dokkanEsCardRepository.cardList(queryOption);
+//            return dokkanEsCardRepository.cardList(queryOption);
+            return null;
         }
+        return null;
     }
 }

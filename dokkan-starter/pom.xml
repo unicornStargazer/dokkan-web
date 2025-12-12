@@ -15,23 +15,22 @@
 
         <dependency>
             <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-dependencies</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-infrastructure</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.hb.dokkan</groupId>
-            <artifactId>dokkan-service</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.hb.dokkan</groupId>
-            <artifactId>dokkan-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.hb.dokkan</groupId>
-            <artifactId>dokkan-config</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.hb.dokkan</groupId>
-            <artifactId>dokkan-common</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-common</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
     </dependencies>

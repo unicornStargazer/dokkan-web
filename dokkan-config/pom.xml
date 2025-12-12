@@ -15,7 +15,19 @@
         <dependency>
             <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-common</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-dependencies</artifactId>
+        </dependency>
+
     </dependencies>
 
     <properties>
