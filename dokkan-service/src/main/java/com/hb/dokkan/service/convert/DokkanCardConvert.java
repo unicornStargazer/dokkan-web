@@ -1,4 +1,4 @@
-package com.hb.dokkan.api.convert;
+package com.hb.dokkan.service.convert;
 
 import com.hb.dokkan.api.cards.domain.request.CardQueryRequest;
 import com.hb.dokkan.api.cards.domain.response.CardListResponse;

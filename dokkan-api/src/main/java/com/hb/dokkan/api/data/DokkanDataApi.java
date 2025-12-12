@@ -1,7 +1,7 @@
 package com.hb.dokkan.api.data;
 
 import com.hb.dokkan.common.domain.DokkanResponse;
-import com.hb.dokkan.service.data.DokkanDataService;
+import com.hb.dokkan.service.DokkanDataDelegate;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class DokkanDataApi {
 
     @Resource
-    private DokkanDataService dataService;
+    private DokkanDataDelegate dataDelegate;
 
     /**
      * 同步wiki卡牌数据
@@ -25,7 +25,7 @@ public class DokkanDataApi {
      */
     @PostMapping("/init-card")
     public DokkanResponse initCard(){
-        return dataService.initCard();
+        return dataDelegate.initCard();
     }
 
     /**
@@ -33,7 +33,7 @@ public class DokkanDataApi {
      */
     @PostMapping("/sync-es-card")
     public DokkanResponse syncEsCardData(){
-        return dataService.syncEsCardData();
+        return dataDelegate.syncEsCardData();
     }
 
 
@@ -42,7 +42,7 @@ public class DokkanDataApi {
      */
     @PostMapping("/init-category")
     public DokkanResponse initCategories(){
-        return dataService.initCategories();
+        return dataDelegate.initCategories();
     }
 
 
@@ -51,7 +51,7 @@ public class DokkanDataApi {
      */
     @PostMapping("/init-link")
     public DokkanResponse initLinks(){
-        return dataService.initLinks();
+        return dataDelegate.initLinks();
     }
 
 

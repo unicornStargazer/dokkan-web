@@ -1,9 +1,8 @@
 package com.hb.dokkan.api.login;
 
-import com.hb.dokkan.api.login.domain.convert.DokkanLoginConvert;
 import com.hb.dokkan.api.login.domain.request.LoginRequest;
 import com.hb.dokkan.common.domain.DokkanResponse;
-import com.hb.dokkan.service.login.DokkanLoginService;
+import com.hb.dokkan.service.DokkanLoginDelegate;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,10 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/login")
 public class DokkanLoginApi {
     @Resource
-    private DokkanLoginService dokkanLoginService;
-
-    @Resource
-    private DokkanLoginConvert convert;
+    private DokkanLoginDelegate loginDelegate;
 
     /**
      * 登录接口
@@ -31,7 +27,7 @@ public class DokkanLoginApi {
      */
     @PostMapping
     public DokkanResponse login(@RequestBody LoginRequest loginRequest){
-        return dokkanLoginService.login(convert.loginRequest2Dto(loginRequest));
+        return loginDelegate.login(loginRequest);
     }
 
 

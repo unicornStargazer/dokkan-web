@@ -1,19 +1,31 @@
 package com.hb.dokkan.service.login;
 
-import com.hb.dokkan.common.domain.DokkanResponse;
+import com.hb.dokkan.infrastructure.mysql.login.DokkanLoginRepository;
 import com.hb.dokkan.service.login.domain.dto.LoginRequestDTO;
 import com.hb.dokkan.service.login.domain.dto.LoginResponseDTO;
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationContext;
+import org.springframework.stereotype.Service;
 
 /**
  * @Description xxxxx
  * @Author stargazer
- * @Date 2025/3/9 19:12
+ * @Date 2025/3/9 19:19
  **/
-public interface DokkanLoginService {
+@Service
+@Slf4j
+public class DokkanLoginService {
+
+    @Resource
+    private DokkanLoginRepository loginRepository;
+
+    private ApplicationContext context;
+
     /**
      * 登录接口
-     * @param loginRequestDTO loginRequestDTO
-     * @return LoginResponseDTO
      */
-    DokkanResponse<LoginResponseDTO> login(LoginRequestDTO loginRequestDTO);
+    public LoginResponseDTO login(LoginRequestDTO loginRequestDTO) {
+        return null;
+    }
 }

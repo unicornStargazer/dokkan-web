@@ -2,20 +2,20 @@ package com.hb.dokkan.service.data.impl;
 
 import com.hb.dokkan.common.domain.DokkanResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import com.hb.dokkan.service.data.DokkanDataService;
+import com.hb.dokkan.service.DokkanDataDelegate;
 import com.hb.dokkan.service.job.sync.SyncDataService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
- * @Description 数据服务
+ * @Description 数据服务实现类
  * @Author stargazer
- * @Date 2025/6/2 21:41
+ * @Date 2025/12/12 23:34
  **/
 @Service
 @Slf4j
-public class DokkanDataServiceImpl implements DokkanDataService {
+public class DokkanDataDelegateImpl implements DokkanDataDelegate {
 
     @Resource
     private SyncDataService syncDataService;
@@ -29,8 +29,8 @@ public class DokkanDataServiceImpl implements DokkanDataService {
             syncDataService.initCard();
             return DokkanResponse.builder().success();
         }catch (DokkanBizException e){
-           log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
-           return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
+            log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
+            return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
         } catch (Exception e) {
             log.error("DokkanCardService#initCard error,",e);
             return DokkanResponse.builder().fail();
@@ -87,6 +87,4 @@ public class DokkanDataServiceImpl implements DokkanDataService {
         }
         return DokkanResponse.builder().success();
     }
-
-
 }

@@ -1,7 +1,9 @@
-package com.hb.dokkan.api.login.domain.convert;
+package com.hb.dokkan.service.convert;
 
 import com.hb.dokkan.api.login.domain.request.LoginRequest;
+import com.hb.dokkan.api.login.domain.response.LoginResponse;
 import com.hb.dokkan.service.login.domain.dto.LoginRequestDTO;
+import com.hb.dokkan.service.login.domain.dto.LoginResponseDTO;
 import org.mapstruct.Mapper;
 
 /**
@@ -12,5 +14,13 @@ import org.mapstruct.Mapper;
 
 @Mapper(componentModel = "spring")
 public interface DokkanLoginConvert {
+    /**
+     * loginRequest2Dto
+     */
     LoginRequestDTO loginRequest2Dto(LoginRequest loginRequest);
+
+    /**
+     * loginResponseDto2Response
+     */
+    LoginResponse loginResponseDto2Response(LoginResponseDTO response);
 }
