@@ -24,5 +24,10 @@ public interface DokkanCardConvert {
     /**
      * 卡片列表VO转换为响应
      */
-    List<CardListResponse> listVoToResponse(List<CardListVO> cardListVOS);
+    List<CardListResponse> listVoToResponseList(List<CardListVO> cardListVOS);
+
+    /**
+     * 卡片列表VO转换为响应
+     */
+    CardListResponse listVoToResponse(CardListVO cardListVO);
 }
