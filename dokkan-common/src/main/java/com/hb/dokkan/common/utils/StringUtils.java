@@ -1,12 +1,17 @@
 package com.hb.dokkan.common.utils;
 
+import java.util.Objects;
+
 /**
- * @Description xxxxx
+ * @Description 字符串工具类
  * @Author stargazer
  * @Date 2025/6/2 1:12
  **/
-public class StringUtil {
+public class StringUtils {
 
+    /**
+     * 蛇形转驼峰
+     */
     public static String snakeToCamel(String snakeCase) {
         if (snakeCase == null || snakeCase.isEmpty()) {
             return snakeCase; // 或者返回 ""，根据需求
@@ -49,5 +54,29 @@ public class StringUtil {
             }
         }
         return camelCaseBuilder.toString();
+    }
+
+    public static boolean isBlank(String str) {
+        return str == null || str.trim().isEmpty();
+    }
+
+    public static boolean isAllBlank(String... strs) {
+        if (Objects.isNull(strs)) {
+            return true;
+        }
+        for (String str : strs) {
+            if (isNotBlank(str)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static boolean isNotBlank(String str) {
+        return !isBlank(str);
+    }
+
+    public static boolean equals(String str1, String str2) {
+        return Objects.equals(str1, str2);
     }
 }

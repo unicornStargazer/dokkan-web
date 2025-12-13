@@ -2,6 +2,7 @@ package com.hb.dokkan.service.convert;
 
 import com.hb.dokkan.api.cards.domain.request.CardQueryRequest;
 import com.hb.dokkan.api.cards.domain.response.CardListResponse;
+import com.hb.dokkan.infrastructure.es.card.condition.CardQueryCondition;
 import com.hb.dokkan.service.domain.cards.query.CardQueryOption;
 import com.hb.dokkan.service.domain.cards.vo.CardListVO;
 import org.mapstruct.Builder;
@@ -30,4 +31,9 @@ public interface DokkanCardConvert {
      * 卡片列表VO转换为响应
      */
     CardListResponse listVoToResponse(CardListVO cardListVO);
+
+    /**
+     * 卡片列表查询参数转换为es查询条件
+     */
+    CardQueryCondition convertToEsQueryCondition(CardQueryOption queryOption);
 }
