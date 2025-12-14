@@ -1,6 +1,7 @@
 package com.hb.dokkan.service.cards;
 
 import com.google.common.collect.Lists;
+import com.hb.dokkan.common.domain.PageResponse;
 import com.hb.dokkan.common.utils.CollectionUtils;
 import com.hb.dokkan.common.utils.StringUtils;
 import com.hb.dokkan.infrastructure.es.card.DokkanEsCardRepository;
@@ -14,9 +15,11 @@ import com.hb.dokkan.service.convert.DokkanCardConvert;
 import com.hb.dokkan.service.domain.cards.query.CardQueryOption;
 import com.hb.dokkan.service.domain.cards.vo.CardListVO;
 import jakarta.annotation.Resource;
+import org.dromara.easyes.core.biz.EsPageInfo;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * @Description 卡片服务实现类
@@ -43,8 +46,7 @@ public class DokkanCardService{
      * 查询卡片列表
      *
      */
-    public List<CardListVO> cardList(CardQueryOption queryOption) {
-
+    public PageResponse<CardListVO> cardList(CardQueryOption queryOption) {
         List<String> categories = Lists.newArrayList();
         List<String> links = Lists.newArrayList();
         if (CollectionUtils.isNotEmpty(queryOption.getCategoryIds())) {
@@ -55,8 +57,23 @@ public class DokkanCardService{
             List<DokkanLinkPO> dokkanLinkPOS = linkRepository.queryLinksByIds(queryOption.getLinkIds());
             links = dokkanLinkPOS.stream().map(DokkanLinkPO::getLinkName).toList();
         }
-        List<CardEsPO> cardEsPOS = dokkanEsCardRepository.queryCardList(buildCondition(queryOption, categories, links));
-        return null;
+        Optional<EsPageInfo<CardEsPO>> optional = dokkanEsCardRepository.queryCardList(buildCondition(queryOption, categories, links));
+        if (optional.isEmpty()) {
+            return PageResponse.<CardListVO>builder()
+                    .currentPage(queryOption.getPageNum())
+                    .pageSize(queryOption.getPageSize())
+                    .total(0)
+                    .data(null)
+                    .build();
+        }
+        EsPageInfo<CardEsPO> esPageInfo = optional.get();
+        List<CardListVO> cardListVOS = cardConvert.convertToCardListVO(esPageInfo.getList());
+        return PageResponse.<CardListVO>builder()
+                .currentPage(esPageInfo.getPageNum())
+                .pageSize(esPageInfo.getPageSize())
+                .total(esPageInfo.getTotal())
+                .data(cardListVOS)
+                .build();
     }
 
     private CardQueryCondition buildCondition(CardQueryOption queryOption, List<String> categories, List<String> links) {

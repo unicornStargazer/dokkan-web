@@ -43,13 +43,13 @@ public class DokkanCardDelegateImpl implements DokkanCardDelegate {
         CardQueryOption queryOption = dokkanCardConvert.queryRequestToDto(request);
         //  初始化分页参数 兜底不传分页参数导致查询数据过多
         queryOption.initPageable();
-        List<CardListVO> cardListVOS = cardService.cardList(queryOption);
-        List<CardListResponse> response = dokkanCardConvert.listVoToResponseList(cardListVOS);
+        PageResponse<CardListVO> response = cardService.cardList(queryOption);
+        List<CardListResponse> list = dokkanCardConvert.listVoToResponseList(response.getData());
         PageResponse<CardListResponse> pageResponse = PageResponse.<CardListResponse>builder()
-                .currentPage(request.getPageNum())
-                .pageSize(request.getPageSize())
-                .total(cardListVOS.size())
-                .data(response)
+                .currentPage(response.getCurrentPage())
+                .pageSize(response.getPageSize())
+                .total(response.getTotal())
+                .data(list)
                 .build();
         return DokkanResponse.<PageResponse<CardListResponse>>builder().withModel(pageResponse);
     }

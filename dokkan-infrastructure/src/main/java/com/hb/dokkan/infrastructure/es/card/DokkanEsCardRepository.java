@@ -13,7 +13,6 @@ import org.dromara.easyes.core.conditions.select.LambdaEsQueryChainWrapper;
 import org.dromara.easyes.core.kernel.EsWrappers;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -32,7 +31,7 @@ public class DokkanEsCardRepository {
     /**
      * 查询卡片列表
      */
-    public List<CardEsPO> queryCardList(CardQueryCondition queryOption) {
+    public Optional<EsPageInfo<CardEsPO>> queryCardList(CardQueryCondition queryOption) {
         LambdaEsQueryChainWrapper<CardEsPO> wrapper = EsWrappers.lambdaChainQuery(dokkanEsCardMapper);
         wrapper.in(CollectionUtils.isNotEmpty(queryOption.getCategories()), CardEsPO::getCategories, queryOption.getCategories())
                 .in(CollectionUtils.isNotEmpty(queryOption.getLinks()), CardEsPO::getLinks, queryOption.getLinks())
@@ -52,9 +51,8 @@ public class DokkanEsCardRepository {
                 }
             });
         }
-        EsPageInfo<CardEsPO> esPage = dokkanEsCardMapper.pageQuery(wrapper, queryOption.getPageNum(), queryOption. ());
-        Optional.ofNullable(esPage).map()
-        return null;
+        EsPageInfo<CardEsPO> esPage = dokkanEsCardMapper.pageQuery(wrapper, queryOption.getPageNum(), queryOption.getPageSize());
+        return Optional.ofNullable(esPage);
     }
 
 
