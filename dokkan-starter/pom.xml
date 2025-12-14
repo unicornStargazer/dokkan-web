@@ -44,6 +44,21 @@
             </exclusions>
         </dependency>
 
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-api</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-common</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
     </dependencies>
 
 </project>
