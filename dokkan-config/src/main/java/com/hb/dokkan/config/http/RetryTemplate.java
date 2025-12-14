@@ -1,4 +1,4 @@
-package com.hb.dokkan.common.http;
+package com.hb.dokkan.config.http;
 
 import lombok.extern.slf4j.Slf4j;
 

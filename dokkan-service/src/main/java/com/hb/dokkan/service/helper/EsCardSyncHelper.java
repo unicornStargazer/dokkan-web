@@ -1,7 +1,7 @@
 package com.hb.dokkan.service.helper;
 
 import com.google.common.collect.Lists;
-import com.hb.dokkan.common.utils.IdGeneratorUtil;
+import com.hb.dokkan.config.mybatis.IdGeneratorUtil;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.infrastructure.es.card.domain.CardEsPO;
 import com.hb.dokkan.infrastructure.mysql.cards.domain.CardPO;

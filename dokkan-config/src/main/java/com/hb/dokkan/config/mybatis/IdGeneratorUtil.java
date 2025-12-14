@@ -1,4 +1,4 @@
-package com.hb.dokkan.common.utils;
+package com.hb.dokkan.config.mybatis;
 
 import java.util.UUID;
 

@@ -1,6 +1,5 @@
 package com.hb.dokkan.config.http;
 
-import com.hb.dokkan.common.http.RetryTemplate;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;

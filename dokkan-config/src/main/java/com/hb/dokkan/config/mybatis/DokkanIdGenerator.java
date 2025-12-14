@@ -2,7 +2,6 @@ package com.hb.dokkan.config.mybatis;
 
 
 import com.baomidou.mybatisplus.core.incrementer.IdentifierGenerator;
-import com.hb.dokkan.common.utils.IdGeneratorUtil;
 import org.springframework.stereotype.Component;
 
 @Component

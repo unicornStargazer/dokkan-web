@@ -11,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.dromara.easyes.core.biz.EsPageInfo;
 import org.dromara.easyes.core.conditions.select.LambdaEsQueryChainWrapper;
 import org.dromara.easyes.core.kernel.EsWrappers;
-import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -21,7 +21,7 @@ import java.util.Optional;
  * @Author stargazer
  * @Date 2025/12/11 23:00
  **/
-@Repository
+@Component
 @Slf4j
 public class DokkanEsCardRepository {
 

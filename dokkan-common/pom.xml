@@ -14,5 +14,20 @@
             <artifactId>dokkan-dependencies</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-config</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-dependencies</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hb.dokkan</groupId>
+                    <artifactId>dokkan-common</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
     </dependencies>
 </project>

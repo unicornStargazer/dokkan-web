@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
 @MapperScan(value = "com.hb.dokkan.infrastructure.mysql.*")
-@EsMapperScan("com.hb.dokkan.infrastructure.es.*")
+@EsMapperScan("com.hb.dokkan.infrastructure.es")
 @EnableAsync
 public class DokkanApplication {
     public static void main(String[] args) {
