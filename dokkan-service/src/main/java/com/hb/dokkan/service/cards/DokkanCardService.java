@@ -1,19 +1,19 @@
 package com.hb.dokkan.service.cards;
 
 import com.google.common.collect.Lists;
-import com.hb.dokkan.common.domain.PageResponse;
+import com.hb.dokkan.common.domain.response.base.PageResponse;
 import com.hb.dokkan.common.utils.CollectionUtils;
 import com.hb.dokkan.common.utils.StringUtils;
 import com.hb.dokkan.infrastructure.es.card.DokkanEsCardRepository;
-import com.hb.dokkan.infrastructure.es.card.condition.CardQueryCondition;
-import com.hb.dokkan.infrastructure.es.card.domain.CardEsPO;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
+import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
-import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
+import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
-import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
+import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.service.convert.DokkanCardConvert;
-import com.hb.dokkan.service.domain.cards.query.CardQueryOption;
-import com.hb.dokkan.service.domain.cards.vo.CardListVO;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
+import com.hb.dokkan.common.domain.vo.cards.CardListVO;
 import jakarta.annotation.Resource;
 import org.dromara.easyes.core.biz.EsPageInfo;
 import org.springframework.stereotype.Service;
@@ -46,7 +46,7 @@ public class DokkanCardService{
      * 查询卡片列表
      *
      */
-    public PageResponse<CardListVO> cardList(CardQueryOption queryOption) {
+    public PageResponse<CardListVO> cardList(CardQueryOptionDTO queryOption) {
         List<String> categories = Lists.newArrayList();
         List<String> links = Lists.newArrayList();
         if (CollectionUtils.isNotEmpty(queryOption.getCategoryIds())) {
@@ -76,13 +76,13 @@ public class DokkanCardService{
                 .build();
     }
 
-    private CardQueryCondition buildCondition(CardQueryOption queryOption, List<String> categories, List<String> links) {
-        CardQueryCondition cardQueryCondition = cardConvert.convertToEsQueryCondition(queryOption);
-        if (StringUtils.isNotBlank(cardQueryCondition.getPropType())) {
-            cardQueryCondition.setType(null);
+    private CardQueryConditionDTO buildCondition(CardQueryOptionDTO queryOption, List<String> categories, List<String> links) {
+        CardQueryConditionDTO cardQueryConditionDTO = cardConvert.convertToEsQueryCondition(queryOption);
+        if (StringUtils.isNotBlank(cardQueryConditionDTO.getPropType())) {
+            cardQueryConditionDTO.setType(null);
         }
-        cardQueryCondition.setCategories(categories);
-        cardQueryCondition.setLinks(links);
-        return cardQueryCondition;
+        cardQueryConditionDTO.setCategories(categories);
+        cardQueryConditionDTO.setLinks(links);
+        return cardQueryConditionDTO;
     }
 }

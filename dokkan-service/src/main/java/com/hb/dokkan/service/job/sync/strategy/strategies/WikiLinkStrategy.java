@@ -1,7 +1,7 @@
 package com.hb.dokkan.service.job.sync.strategy.strategies;
 
 import com.hb.dokkan.common.utils.TranslationUtils;
-import com.hb.dokkan.service.domain.wiki.WikiLinkDTO;
+import com.hb.dokkan.common.domain.dto.data.wiki.WikiLinkDTO;
 import com.hb.dokkan.service.facade.WikiFacade;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;

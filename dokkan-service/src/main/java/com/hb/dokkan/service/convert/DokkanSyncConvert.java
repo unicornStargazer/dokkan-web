@@ -1,15 +1,15 @@
 package com.hb.dokkan.service.convert;
 
+import com.hb.dokkan.common.domain.dto.data.cards.*;
+import com.hb.dokkan.common.domain.dto.data.wiki.*;
 import com.hb.dokkan.common.utils.DateUtils;
-import com.hb.dokkan.infrastructure.mysql.cards.domain.CardPO;
-import com.hb.dokkan.infrastructure.mysql.cards.domain.EzaCardPO;
-import com.hb.dokkan.infrastructure.mysql.cards.domain.SkillPO;
-import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
-import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
-import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
-import com.hb.dokkan.service.domain.cards.dto.*;
-import com.hb.dokkan.service.domain.wiki.*;
-import com.hb.dokkan.service.enums.CardPropTypeEnum;
+import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.EzaCardPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.SkillPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.SpecialPO;
+import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
+import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
+import com.hb.dokkan.common.enums.CardPropTypeEnum;
 import org.mapstruct.*;
 
 import java.util.Date;

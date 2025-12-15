@@ -1,7 +1,7 @@
 package com.hb.dokkan.infrastructure.mysql.login.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.hb.dokkan.infrastructure.mysql.login.domain.po.LoginPO;
+import com.hb.dokkan.common.domain.po.mysql.login.LoginPO;
 import org.apache.ibatis.annotations.Mapper;
 
 /**

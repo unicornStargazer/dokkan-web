@@ -1,7 +1,7 @@
 package com.hb.dokkan.infrastructure.mysql.categories.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.hb.dokkan.infrastructure.mysql.categories.domain.DokkanCategoryPO;
+import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 
 /**
  * @Description 分类mapper

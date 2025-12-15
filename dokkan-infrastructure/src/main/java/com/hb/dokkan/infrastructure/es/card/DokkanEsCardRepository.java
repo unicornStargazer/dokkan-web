@@ -3,8 +3,8 @@ package com.hb.dokkan.infrastructure.es.card;
 import com.hb.dokkan.common.utils.CollectionUtils;
 import com.hb.dokkan.common.utils.MapUtils;
 import com.hb.dokkan.common.utils.StringUtils;
-import com.hb.dokkan.infrastructure.es.card.condition.CardQueryCondition;
-import com.hb.dokkan.infrastructure.es.card.domain.CardEsPO;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
+import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +31,7 @@ public class DokkanEsCardRepository {
     /**
      * 查询卡片列表
      */
-    public Optional<EsPageInfo<CardEsPO>> queryCardList(CardQueryCondition queryOption) {
+    public Optional<EsPageInfo<CardEsPO>> queryCardList(CardQueryConditionDTO queryOption) {
         LambdaEsQueryChainWrapper<CardEsPO> wrapper = EsWrappers.lambdaChainQuery(dokkanEsCardMapper);
         wrapper.in(CollectionUtils.isNotEmpty(queryOption.getCategories()), CardEsPO::getCategories, queryOption.getCategories())
                 .in(CollectionUtils.isNotEmpty(queryOption.getLinks()), CardEsPO::getLinks, queryOption.getLinks())

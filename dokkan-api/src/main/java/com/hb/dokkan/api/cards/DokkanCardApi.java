@@ -1,9 +1,9 @@
 package com.hb.dokkan.api.cards;
 
-import com.hb.dokkan.api.cards.domain.request.CardQueryRequest;
-import com.hb.dokkan.api.cards.domain.response.CardListResponse;
-import com.hb.dokkan.common.domain.DokkanResponse;
-import com.hb.dokkan.common.domain.PageResponse;
+import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
+import com.hb.dokkan.common.domain.response.cards.CardListResponse;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
+import com.hb.dokkan.common.domain.response.base.PageResponse;
 import com.hb.dokkan.service.DokkanCardDelegate;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;

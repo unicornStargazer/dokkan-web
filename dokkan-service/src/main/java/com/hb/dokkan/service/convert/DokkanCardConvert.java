@@ -1,11 +1,11 @@
 package com.hb.dokkan.service.convert;
 
-import com.hb.dokkan.api.cards.domain.request.CardQueryRequest;
-import com.hb.dokkan.api.cards.domain.response.CardListResponse;
-import com.hb.dokkan.infrastructure.es.card.condition.CardQueryCondition;
-import com.hb.dokkan.infrastructure.es.card.domain.CardEsPO;
-import com.hb.dokkan.service.domain.cards.query.CardQueryOption;
-import com.hb.dokkan.service.domain.cards.vo.CardListVO;
+import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
+import com.hb.dokkan.common.domain.response.cards.CardListResponse;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
+import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
+import com.hb.dokkan.common.domain.vo.cards.CardListVO;
 import org.mapstruct.Builder;
 import org.mapstruct.Mapper;
 
@@ -21,7 +21,7 @@ public interface DokkanCardConvert {
     /**
      * 卡片列表查询参数转换为DTO
      */
-    CardQueryOption queryRequestToDto(CardQueryRequest request);
+    CardQueryOptionDTO queryRequestToDto(CardQueryRequest request);
 
     /**
      * 卡片列表VO转换为响应
@@ -36,7 +36,7 @@ public interface DokkanCardConvert {
     /**
      * 卡片列表查询参数转换为es查询条件
      */
-    CardQueryCondition convertToEsQueryCondition(CardQueryOption queryOption);
+    CardQueryConditionDTO convertToEsQueryCondition(CardQueryOptionDTO queryOption);
 
     /**
      * es卡片列表PO转换为VO

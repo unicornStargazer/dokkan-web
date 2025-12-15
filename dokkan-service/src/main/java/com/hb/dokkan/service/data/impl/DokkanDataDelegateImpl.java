@@ -1,6 +1,6 @@
 package com.hb.dokkan.service.data.impl;
 
-import com.hb.dokkan.common.domain.DokkanResponse;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.service.DokkanDataDelegate;
 import com.hb.dokkan.service.job.sync.SyncDataService;

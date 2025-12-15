@@ -1,9 +1,9 @@
 package com.hb.dokkan.service;
 
-import com.hb.dokkan.api.cards.domain.request.CardQueryRequest;
-import com.hb.dokkan.api.cards.domain.response.CardListResponse;
-import com.hb.dokkan.common.domain.DokkanResponse;
-import com.hb.dokkan.common.domain.PageResponse;
+import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
+import com.hb.dokkan.common.domain.response.cards.CardListResponse;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
+import com.hb.dokkan.common.domain.response.base.PageResponse;
 
 /**
  * @Description 控制层-卡牌服务

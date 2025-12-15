@@ -2,7 +2,7 @@ package com.hb.dokkan.infrastructure.mysql.cards;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.google.common.collect.Lists;
-import com.hb.dokkan.infrastructure.mysql.cards.domain.CardPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
 import com.hb.dokkan.infrastructure.mysql.cards.mapper.DokkanCardMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.util.CollectionUtils;

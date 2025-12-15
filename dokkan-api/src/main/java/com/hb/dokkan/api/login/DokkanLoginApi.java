@@ -1,7 +1,7 @@
 package com.hb.dokkan.api.login;
 
-import com.hb.dokkan.api.login.domain.request.LoginRequest;
-import com.hb.dokkan.common.domain.DokkanResponse;
+import com.hb.dokkan.common.domain.request.login.LoginRequest;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.service.DokkanLoginDelegate;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.PostMapping;

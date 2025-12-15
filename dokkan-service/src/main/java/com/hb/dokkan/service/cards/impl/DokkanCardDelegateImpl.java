@@ -1,16 +1,16 @@
 package com.hb.dokkan.service.cards.impl;
 
-import com.hb.dokkan.api.cards.domain.request.CardQueryRequest;
-import com.hb.dokkan.api.cards.domain.response.CardListResponse;
+import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
+import com.hb.dokkan.common.domain.response.cards.CardListResponse;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
-import com.hb.dokkan.common.domain.DokkanResponse;
-import com.hb.dokkan.common.domain.PageResponse;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
+import com.hb.dokkan.common.domain.response.base.PageResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.service.DokkanCardDelegate;
 import com.hb.dokkan.service.cards.DokkanCardService;
 import com.hb.dokkan.service.convert.DokkanCardConvert;
-import com.hb.dokkan.service.domain.cards.query.CardQueryOption;
-import com.hb.dokkan.service.domain.cards.vo.CardListVO;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
+import com.hb.dokkan.common.domain.vo.cards.CardListVO;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
@@ -40,7 +40,7 @@ public class DokkanCardDelegateImpl implements DokkanCardDelegate {
         if (Objects.isNull(request)) {
             throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
         }
-        CardQueryOption queryOption = dokkanCardConvert.queryRequestToDto(request);
+        CardQueryOptionDTO queryOption = dokkanCardConvert.queryRequestToDto(request);
         //  初始化分页参数 兜底不传分页参数导致查询数据过多
         queryOption.initPageable();
         PageResponse<CardListVO> response = cardService.cardList(queryOption);

@@ -1,7 +1,7 @@
 package com.hb.dokkan.infrastructure.mysql.links.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
+import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 
 /**
  * @Description 链接mappper

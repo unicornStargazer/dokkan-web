@@ -1,6 +1,6 @@
 package com.hb.dokkan.service;
 
-import com.hb.dokkan.common.domain.DokkanResponse;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 
 /**
  * @Description 控制层-数据服务

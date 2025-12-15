@@ -2,11 +2,11 @@ package com.hb.dokkan.service.helper;
 
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Lists;
+import com.hb.dokkan.common.domain.dto.data.cards.*;
+import com.hb.dokkan.common.domain.dto.data.wiki.*;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
-import com.hb.dokkan.service.domain.cards.bo.WikiCardBO;
-import com.hb.dokkan.service.domain.cards.dto.*;
-import com.hb.dokkan.service.domain.wiki.*;
-import com.hb.dokkan.service.enums.CardPropTypeEnum;
+import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
+import com.hb.dokkan.common.enums.CardPropTypeEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

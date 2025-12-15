@@ -1,6 +1,6 @@
 package com.hb.dokkan.api.data;
 
-import com.hb.dokkan.common.domain.DokkanResponse;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.service.DokkanDataDelegate;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.PostMapping;

@@ -1,7 +1,7 @@
 package com.hb.dokkan.infrastructure.mysql.cards;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.hb.dokkan.infrastructure.mysql.cards.domain.SpecialPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.SpecialPO;
 import com.hb.dokkan.infrastructure.mysql.cards.mapper.DokkanSpecialMapper;
 import org.springframework.stereotype.Repository;
 

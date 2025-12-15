@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.google.common.collect.Lists;
 import com.hb.dokkan.common.utils.CollectionUtils;
-import com.hb.dokkan.infrastructure.mysql.links.domain.DokkanLinkPO;
+import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.infrastructure.mysql.links.mapper.DokkanLinkMapper;
 import org.springframework.stereotype.Repository;
 

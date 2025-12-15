@@ -1,8 +1,8 @@
 package com.hb.dokkan.service;
 
-import com.hb.dokkan.api.login.domain.request.LoginRequest;
-import com.hb.dokkan.api.login.domain.response.LoginResponse;
-import com.hb.dokkan.common.domain.DokkanResponse;
+import com.hb.dokkan.common.domain.request.login.LoginRequest;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
+import com.hb.dokkan.common.domain.response.login.LoginResponse;
 
 /**
  * @Description 控制层-登录服务

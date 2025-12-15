@@ -1,8 +1,8 @@
 package com.hb.dokkan.service.login.impl;
 
-import com.hb.dokkan.api.login.domain.request.LoginRequest;
-import com.hb.dokkan.api.login.domain.response.LoginResponse;
-import com.hb.dokkan.common.domain.DokkanResponse;
+import com.hb.dokkan.common.domain.request.login.LoginRequest;
+import com.hb.dokkan.common.domain.response.login.LoginResponse;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.service.DokkanLoginDelegate;
 import com.hb.dokkan.service.convert.DokkanLoginConvert;
 import com.hb.dokkan.service.login.DokkanLoginService;

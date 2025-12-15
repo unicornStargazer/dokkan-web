@@ -1,7 +1,7 @@
 package com.hb.dokkan.service.convert;
 
-import com.hb.dokkan.api.login.domain.request.LoginRequest;
-import com.hb.dokkan.api.login.domain.response.LoginResponse;
+import com.hb.dokkan.common.domain.request.login.LoginRequest;
+import com.hb.dokkan.common.domain.response.login.LoginResponse;
 import com.hb.dokkan.service.login.domain.dto.LoginRequestDTO;
 import com.hb.dokkan.service.login.domain.dto.LoginResponseDTO;
 import org.mapstruct.Mapper;

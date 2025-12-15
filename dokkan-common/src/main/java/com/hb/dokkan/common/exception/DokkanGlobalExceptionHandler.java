@@ -1,7 +1,7 @@
 package com.hb.dokkan.common.exception;
 
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
-import com.hb.dokkan.common.domain.DokkanResponse;
+import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.ExceptionHandler;
