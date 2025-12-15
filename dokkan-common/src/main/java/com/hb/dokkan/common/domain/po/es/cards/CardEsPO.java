@@ -6,6 +6,7 @@ import lombok.Data;
 import org.dromara.easyes.annotation.IndexField;
 import org.dromara.easyes.annotation.IndexId;
 import org.dromara.easyes.annotation.IndexName;
+import org.dromara.easyes.annotation.rely.Analyzer;
 import org.dromara.easyes.annotation.rely.FieldType;
 import org.dromara.easyes.annotation.rely.IdType;
 
@@ -119,12 +120,13 @@ public class CardEsPO implements Serializable {
     /**
      * 分类 逗号分割
      */
-    private List<String> categories;
+    @IndexField(fieldType = FieldType.TEXT,analyzer = Analyzer.PATTERN, searchAnalyzer = Analyzer.PATTERN)
+    private String categories;
 
     /**
      * 链接
      */
-    private List<String> links;
+    private String links;
 
     /**
      * 三围潜力值

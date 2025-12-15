@@ -62,13 +62,13 @@ public class CardQueryOptionDTO implements Serializable {
     private List<Integer> categoryIds;
 
     /**
-     * 链接匹配类型
+     * 链接匹配类型 0: and 1: or
      */
     private String linkMatchType;
 
 
     /**
-     * 分类匹配类型
+     * 分类匹配类型 0: and 1: or
      */
     private String categoryMatchType;
 

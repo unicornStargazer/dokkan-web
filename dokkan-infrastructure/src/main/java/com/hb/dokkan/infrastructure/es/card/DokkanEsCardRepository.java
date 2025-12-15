@@ -52,7 +52,9 @@ public class DokkanEsCardRepository {
         }
         if (CollectionUtils.isNotEmpty(queryOption.getLinks())) {
             if (queryOption.getLinkMatchType().equals("0")) {
-                wrapper.and(w -> queryOption.getLinks().forEach(link -> w.eq(CardEsPO::getLinks, link)));
+                wrapper.and(
+                        w -> queryOption.getLinks().forEach(link -> w.like(CardEsPO::getLinks, link))
+                )
             }else {
                 wrapper.in(CardEsPO::getLinks, queryOption.getLinks());
             }

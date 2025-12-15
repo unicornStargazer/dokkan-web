@@ -207,7 +207,7 @@ public class EsCardSyncHelper {
         }
     }
 
-    private List<String> buildLinkName(List<DokkanLinkPO> links, List<Long> linkId) {
+    private String buildLinkName(List<DokkanLinkPO> links, List<Long> linkId) {
         if (CollectionUtils.isEmpty(links) || CollectionUtils.isEmpty(linkId)) {
             return null;
         }
@@ -221,10 +221,10 @@ public class EsCardSyncHelper {
                 linkNames.add(link.getLinkName());
             }
         }
-        return linkNames;
+        return String.join(",", linkNames);
     }
 
-    private List<String> buildCategoryNames(List<DokkanCategoryPO> categories, List<Long> categoryId) {
+    private String buildCategoryNames(List<DokkanCategoryPO> categories, List<Long> categoryId) {
         if (CollectionUtils.isEmpty(categories) || CollectionUtils.isEmpty(categoryId)) {
             return null;
         }
@@ -238,6 +238,6 @@ public class EsCardSyncHelper {
                 categoryNames.add(category.getCategoryName());
             }
         }
-        return categoryNames;
+        return String.join(",", categoryNames);
     }
 }
