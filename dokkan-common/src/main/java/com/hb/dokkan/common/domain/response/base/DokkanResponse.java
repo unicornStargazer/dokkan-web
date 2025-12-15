@@ -47,10 +47,10 @@ public final class DokkanResponse<T> implements Serializable {
             return this.response;
         }
 
-        public DokkanResponse<T> withModel(T model) {
+        public DokkanResponseBuilder<T> withModel(T model) {
             this.response.setModel(model);
             this.response.setEmpty(ObjectUtils.isEmpty(model));
-            return this.response;
+            return this;
         }
 
         public DokkanResponse<T> fail() {

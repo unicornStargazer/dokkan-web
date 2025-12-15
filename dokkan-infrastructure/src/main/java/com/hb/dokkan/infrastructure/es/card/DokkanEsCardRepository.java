@@ -9,14 +9,12 @@ import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.easyes.core.biz.EsPageInfo;
-import org.dromara.easyes.core.conditions.select.LambdaEsQueryChainWrapper;
+import org.dromara.easyes.core.conditions.select.LambdaEsQueryWrapper;
 import org.dromara.easyes.core.kernel.EsWrappers;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 import java.util.Optional;
-
-import static com.hb.dokkan.common.constants.EsCardAttributeKey.ORDER_BY_TIME;
 
 /**
  * @Description es卡片持久层服务类
@@ -34,7 +32,7 @@ public class DokkanEsCardRepository {
      * 查询卡片列表
      */
     public Optional<EsPageInfo<CardEsPO>> queryCardList(CardQueryConditionDTO queryOption) {
-        LambdaEsQueryChainWrapper<CardEsPO> wrapper = EsWrappers.lambdaChainQuery(dokkanEsCardMapper);
+        LambdaEsQueryWrapper<CardEsPO> wrapper = EsWrappers.lambdaQuery(CardEsPO.class);
         wrapper
                 .eq(Objects.nonNull(queryOption.getCardId()), CardEsPO::getCardId, queryOption.getCardId())
                 .eq(StringUtils.isNotBlank(queryOption.getType()), CardEsPO::getType, queryOption.getType())
@@ -42,8 +40,7 @@ public class DokkanEsCardRepository {
                 .eq(StringUtils.isNotBlank(queryOption.getRarity()), CardEsPO::getRarity, queryOption.getRarity())
                 .like(StringUtils.isNotBlank(queryOption.getCardName()), CardEsPO::getCardName, queryOption.getCardName());
         if (MapUtils.isEmpty(queryOption.getOrderBy())) {
-            wrapper.orderByDesc(cardEsPO -> Objects.nonNull(cardEsPO.getAttributes()) && cardEsPO.getAttributes().containsKey(ORDER_BY_TIME)
-                    ? cardEsPO.getAttributes().get(ORDER_BY_TIME) : cardEsPO.getPublishTime());
+            wrapper.orderByDesc(CardEsPO::getOrderByTime);
         } else {
             queryOption.getOrderBy().forEach((k, v) -> {
                 if (v) {

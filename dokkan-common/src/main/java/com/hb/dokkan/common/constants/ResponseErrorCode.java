@@ -12,7 +12,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum ResponseErrorCode {
 
-    SUCCESS("000000","调用成功"),
+    SUCCESS("200","调用成功"),
 
     FAILED_DEFAULT("500", "系统错误"),
 

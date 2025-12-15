@@ -49,6 +49,8 @@ public class DokkanCardDelegate {
                 .total(response.getTotal())
                 .data(list)
                 .build();
-        return DokkanResponse.<PageResponse<CardListResponse>>builder().withModel(pageResponse);
+        return DokkanResponse.<PageResponse<CardListResponse>>builder()
+                .withModel(pageResponse)
+                .success();
     }
 }

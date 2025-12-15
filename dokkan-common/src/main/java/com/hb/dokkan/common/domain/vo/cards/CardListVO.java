@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.util.Date;
+import java.util.List;
 
 /**
  * @Description 卡片列表vo
@@ -77,11 +78,11 @@ public class CardListVO implements Serializable {
     /**
      * 分类 逗号分割
      */
-    private String categories;
+    private List<String> categories;
 
     /**
      * 链接
      */
-    private String links;
+    private List<String> links;
 
 }

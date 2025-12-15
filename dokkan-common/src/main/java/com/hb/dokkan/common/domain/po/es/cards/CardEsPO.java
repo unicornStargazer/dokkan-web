@@ -213,6 +213,13 @@ public class CardEsPO implements Serializable {
 
     /******************* 下拉/待机技能-end *******************/
 
+    /*************** 其他 *******************/
+
+    /**
+     * 排序时间
+     */
+    private Date orderByTime;
+
     /**
      * 扩展属性
      */

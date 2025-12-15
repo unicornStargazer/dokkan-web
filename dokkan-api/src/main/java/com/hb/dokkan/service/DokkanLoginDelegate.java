@@ -29,6 +29,8 @@ public class DokkanLoginDelegate {
      */
     public DokkanResponse<LoginResponse> login(LoginRequest request) {
         LoginResponseDTO response = loginService.login(loginConvert.loginRequest2Dto(request));
-        return DokkanResponse.<LoginResponse>builder().withModel(loginConvert.loginResponseDto2Response(response));
+        return DokkanResponse.<LoginResponse>builder()
+                .withModel(loginConvert.loginResponseDto2Response(response))
+                .success();
     }
 }

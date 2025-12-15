@@ -1,9 +1,7 @@
 package com.hb.dokkan.service.helper;
 
 import com.google.common.collect.Lists;
-import com.hb.dokkan.common.utils.DateUtils;
-import com.hb.dokkan.config.mybatis.IdGeneratorUtil;
-import com.hb.dokkan.common.utils.JsonUtils;
+import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoAttribute;
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
 import com.hb.dokkan.common.domain.po.mysql.cards.EzaCardPO;
@@ -11,8 +9,10 @@ import com.hb.dokkan.common.domain.po.mysql.cards.SkillPO;
 import com.hb.dokkan.common.domain.po.mysql.cards.SpecialPO;
 import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
+import com.hb.dokkan.common.utils.DateUtils;
+import com.hb.dokkan.common.utils.JsonUtils;
+import com.hb.dokkan.config.mybatis.IdGeneratorUtil;
 import com.hb.dokkan.service.convert.DokkanEsSyncConvert;
-import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoAttribute;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,7 +23,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.hb.dokkan.common.constants.DokkanConstants.*;
-import static com.hb.dokkan.common.constants.EsCardAttributeKey.ORDER_BY_TIME;
 
 /**
  * @Description es卡片同步助手
@@ -58,6 +57,7 @@ public class EsCardSyncHelper {
             esCardPO.setCardId(card.getCardId());
             esCardPO.setCardName(card.getCardName());
             esCardPO.setPropType(card.getPropType());
+            esCardPO.setTitle(card.getTitle());
             esCardPO.setType(card.getType());
             esCardPO.setCost(card.getCost());
             esCardPO.setRarity(card.getRarity());
@@ -85,14 +85,13 @@ public class EsCardSyncHelper {
     }
 
     private void buildAttributeInfo(CardEsPO esCardPO) {
-        if (Objects.isNull(esCardPO.getPublishTime()) || Objects.isNull(esCardPO.getEzaPublishTime()) || Objects.isNull(esCardPO.getSuperEzaPublishTime())) {
+        if (Objects.isNull(esCardPO.getPublishTime()) && Objects.isNull(esCardPO.getEzaPublishTime()) && Objects.isNull(esCardPO.getSuperEzaPublishTime())) {
             return;
         }
-        Map<String,Object> attributes = new HashMap<>();
+//        Map<String,Object> attributes = new HashMap<>();
         Date latestPublishTime = DateUtils.latestDate(esCardPO.getPublishTime(), esCardPO.getEzaPublishTime(), esCardPO.getSuperEzaPublishTime());
-        esCardPO.setAttributes(attributes);
         if (Objects.nonNull(latestPublishTime)) {
-            attributes.put(ORDER_BY_TIME, latestPublishTime);
+            esCardPO.setOrderByTime(latestPublishTime);
         }
     }
 
