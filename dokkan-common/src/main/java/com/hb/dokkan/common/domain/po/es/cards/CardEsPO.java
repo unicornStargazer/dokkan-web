@@ -12,6 +12,7 @@ import org.dromara.easyes.annotation.rely.IdType;
 import java.io.Serializable;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @Description card索引
@@ -118,12 +119,12 @@ public class CardEsPO implements Serializable {
     /**
      * 分类 逗号分割
      */
-    private String categories;
+    private List<String> categories;
 
     /**
      * 链接
      */
-    private String links;
+    private List<String> links;
 
     /**
      * 三围潜力值
@@ -215,7 +216,7 @@ public class CardEsPO implements Serializable {
     /**
      * 扩展属性
      */
-    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = CardEsAttribute.class)
-    private List<CardEsAttribute> attributes;
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = Object.class)
+    private Map<String, Object> attributes;
 
 }

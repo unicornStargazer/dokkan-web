@@ -1,6 +1,7 @@
 package com.hb.dokkan.service.helper;
 
 import com.google.common.collect.Lists;
+import com.hb.dokkan.common.utils.DateUtils;
 import com.hb.dokkan.config.mybatis.IdGeneratorUtil;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
@@ -22,6 +23,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.hb.dokkan.common.constants.DokkanConstants.*;
+import static com.hb.dokkan.common.constants.EsCardAttributeKey.ORDER_BY_TIME;
 
 /**
  * @Description es卡片同步助手
@@ -75,8 +77,23 @@ public class EsCardSyncHelper {
 
             // card技能信息
             buildSkillInfo(esCardPO, skillPOS, attribute);
+
+            //扩展属性
+            buildAttributeInfo(esCardPO);
         });
         return esCards;
+    }
+
+    private void buildAttributeInfo(CardEsPO esCardPO) {
+        if (Objects.isNull(esCardPO.getPublishTime()) || Objects.isNull(esCardPO.getEzaPublishTime()) || Objects.isNull(esCardPO.getSuperEzaPublishTime())) {
+            return;
+        }
+        Map<String,Object> attributes = new HashMap<>();
+        Date latestPublishTime = DateUtils.latestDate(esCardPO.getPublishTime(), esCardPO.getEzaPublishTime(), esCardPO.getSuperEzaPublishTime());
+        esCardPO.setAttributes(attributes);
+        if (Objects.nonNull(latestPublishTime)) {
+            attributes.put(ORDER_BY_TIME, latestPublishTime);
+        }
     }
 
     /**
@@ -191,7 +208,7 @@ public class EsCardSyncHelper {
         }
     }
 
-    private String buildLinkName(List<DokkanLinkPO> links, List<Long> linkId) {
+    private List<String> buildLinkName(List<DokkanLinkPO> links, List<Long> linkId) {
         if (CollectionUtils.isEmpty(links) || CollectionUtils.isEmpty(linkId)) {
             return null;
         }
@@ -205,10 +222,10 @@ public class EsCardSyncHelper {
                 linkNames.add(link.getLinkName());
             }
         }
-        return String.join(",", linkNames);
+        return linkNames;
     }
 
-    private String buildCategoryNames(List<DokkanCategoryPO> categories, List<Long> categoryId) {
+    private List<String> buildCategoryNames(List<DokkanCategoryPO> categories, List<Long> categoryId) {
         if (CollectionUtils.isEmpty(categories) || CollectionUtils.isEmpty(categoryId)) {
             return null;
         }
@@ -222,6 +239,6 @@ public class EsCardSyncHelper {
                 categoryNames.add(category.getCategoryName());
             }
         }
-        return String.join(",", categoryNames);
+        return categoryNames;
     }
 }

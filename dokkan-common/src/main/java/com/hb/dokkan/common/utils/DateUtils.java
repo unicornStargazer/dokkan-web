@@ -4,7 +4,9 @@ import lombok.experimental.UtilityClass;
 import org.apache.commons.lang3.ObjectUtils;
 
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.Objects;
 
 /**
  * @Description xxxxx
@@ -42,4 +44,13 @@ public class DateUtils {
         }
     }
 
+    public static Date latestDate(Date ... dates) {
+        if (ObjectUtils.isEmpty(dates)) {
+            return null;
+        }
+        Date latestDate = Arrays.stream(dates).filter(Objects::nonNull)
+                .max(Date::compareTo)
+                .orElse(null);
+        return latestDate;
+    }
 }

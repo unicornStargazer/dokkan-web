@@ -56,6 +56,17 @@ public class CardQueryConditionDTO implements Serializable {
     private List<String> categories;
 
     /**
+     * 链接匹配类型
+     */
+    private String linkMatchType;
+
+
+    /**
+     * 分类匹配类型
+     */
+    private String categoryMatchType;
+
+    /**
      * 排序字段
      * key: 排序字段名
      * value: true: 升序, false: 降序

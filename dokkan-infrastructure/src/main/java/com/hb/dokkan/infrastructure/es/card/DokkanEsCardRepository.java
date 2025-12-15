@@ -1,10 +1,10 @@
 package com.hb.dokkan.infrastructure.es.card;
 
+import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
+import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.common.utils.CollectionUtils;
 import com.hb.dokkan.common.utils.MapUtils;
 import com.hb.dokkan.common.utils.StringUtils;
-import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
-import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 import java.util.Optional;
+
+import static com.hb.dokkan.common.constants.EsCardAttributeKey.ORDER_BY_TIME;
 
 /**
  * @Description es卡片持久层服务类
@@ -33,15 +35,15 @@ public class DokkanEsCardRepository {
      */
     public Optional<EsPageInfo<CardEsPO>> queryCardList(CardQueryConditionDTO queryOption) {
         LambdaEsQueryChainWrapper<CardEsPO> wrapper = EsWrappers.lambdaChainQuery(dokkanEsCardMapper);
-        wrapper.in(CollectionUtils.isNotEmpty(queryOption.getCategories()), CardEsPO::getCategories, queryOption.getCategories())
-                .in(CollectionUtils.isNotEmpty(queryOption.getLinks()), CardEsPO::getLinks, queryOption.getLinks())
+        wrapper
                 .eq(Objects.nonNull(queryOption.getCardId()), CardEsPO::getCardId, queryOption.getCardId())
                 .eq(StringUtils.isNotBlank(queryOption.getType()), CardEsPO::getType, queryOption.getType())
                 .eq(StringUtils.isNotBlank(queryOption.getPropType()), CardEsPO::getPropType, queryOption.getPropType())
                 .eq(StringUtils.isNotBlank(queryOption.getRarity()), CardEsPO::getRarity, queryOption.getRarity())
                 .like(StringUtils.isNotBlank(queryOption.getCardName()), CardEsPO::getCardName, queryOption.getCardName());
         if (MapUtils.isEmpty(queryOption.getOrderBy())) {
-            wrapper.orderByDesc(CardEsPO::getPublishTime, CardEsPO::getEzaPublishTime, CardEsPO::getEzaPublishTime);
+            wrapper.orderByDesc(cardEsPO -> Objects.nonNull(cardEsPO.getAttributes()) && cardEsPO.getAttributes().containsKey(ORDER_BY_TIME)
+                    ? cardEsPO.getAttributes().get(ORDER_BY_TIME) : cardEsPO.getPublishTime());
         } else {
             queryOption.getOrderBy().forEach((k, v) -> {
                 if (v) {
@@ -50,6 +52,20 @@ public class DokkanEsCardRepository {
                     wrapper.orderByAsc(k);
                 }
             });
+        }
+        if (CollectionUtils.isNotEmpty(queryOption.getLinks())) {
+            if (queryOption.getLinkMatchType().equals("0")) {
+                wrapper.and(w -> queryOption.getLinks().forEach(link -> w.eq(CardEsPO::getLinks, link)));
+            }else {
+                wrapper.in(CardEsPO::getLinks, queryOption.getLinks());
+            }
+        }
+        if (CollectionUtils.isNotEmpty(queryOption.getCategories())) {
+            if (queryOption.getCategoryMatchType().equals("0")) {
+                wrapper.and(w -> queryOption.getCategories().forEach(category -> w.eq(CardEsPO::getCategories, category)));
+            }else {
+                wrapper.in(CardEsPO::getCategories, queryOption.getCategories());
+            }
         }
         EsPageInfo<CardEsPO> esPage = dokkanEsCardMapper.pageQuery(wrapper, queryOption.getPageNum(), queryOption.getPageSize());
         return Optional.ofNullable(esPage);

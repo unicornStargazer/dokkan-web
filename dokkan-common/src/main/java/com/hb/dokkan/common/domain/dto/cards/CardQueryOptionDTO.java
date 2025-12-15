@@ -6,6 +6,7 @@ import lombok.Data;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -59,6 +60,24 @@ public class CardQueryOptionDTO implements Serializable {
      * 分类id列表
      */
     private List<Integer> categoryIds;
+
+    /**
+     * 链接匹配类型
+     */
+    private String linkMatchType;
+
+
+    /**
+     * 分类匹配类型
+     */
+    private String categoryMatchType;
+
+    /**
+     * 排序字段
+     * key: 排序字段名
+     * value: true: 升序, false: 降序
+     */
+    private Map<String, Boolean> orderBy;
 
     /**
      * 初始化分页参数

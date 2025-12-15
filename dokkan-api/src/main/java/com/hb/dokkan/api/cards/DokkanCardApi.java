@@ -30,6 +30,7 @@ public class DokkanCardApi {
      */
     @PostMapping("/list")
     public DokkanResponse<PageResponse<CardListResponse>> cardList(@RequestBody CardQueryRequest request){
+        log.info("cardList request:{}",request);
         return cardDelegate.cardList(request);
     }
 
