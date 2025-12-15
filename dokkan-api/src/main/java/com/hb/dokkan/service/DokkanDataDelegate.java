@@ -1,30 +1,85 @@
 package com.hb.dokkan.service;
 
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
+import com.hb.dokkan.common.exception.domain.DokkanBizException;
+import com.hb.dokkan.service.job.sync.SyncDataService;
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 /**
- * @Description 控制层-数据服务
+ * @Description 数据服务实现类
  * @Author stargazer
- * @Date 2025/12/12 23:25
+ * @Date 2025/12/12 23:34
  **/
-public interface DokkanDataDelegate {
+@Service
+@Slf4j
+public class DokkanDataDelegate {
+
+    @Resource
+    private SyncDataService syncDataService;
+
     /**
      * 初始化卡片数据
      */
-    DokkanResponse initCard();
+    public DokkanResponse initCard() {
+        try {
+            syncDataService.initCard();
+            return DokkanResponse.builder().success();
+        }catch (DokkanBizException e){
+            log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
+            return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
+        } catch (Exception e) {
+            log.error("DokkanCardService#initCard error,",e);
+            return DokkanResponse.builder().fail();
+        }
+    }
 
     /**
      * 同步es卡片数据
      */
-    DokkanResponse syncEsCardData();
+    public DokkanResponse syncEsCardData() {
+        try {
+            syncDataService.syncEsCardData();
+            return DokkanResponse.builder().success();
+        } catch (DokkanBizException e){
+            log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
+            return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
+        } catch (Exception e) {
+            log.error("DokkanCardService#syncEsCardData error,",e);
+            return DokkanResponse.builder().fail();
+        }
+    }
 
     /**
      * 初始化分类数据
      */
-    DokkanResponse initCategories();
+    public DokkanResponse initCategories() {
+        try {
+            syncDataService.initCategories();
+        }catch (DokkanBizException e){
+            log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
+            return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
+        } catch (Exception e) {
+            log.error("DokkanDataServiceImpl#initCategories error,",e);
+            return DokkanResponse.builder().fail();
+        }
+        return DokkanResponse.builder().success();
+    }
 
     /**
      * 初始化链接数据
      */
-    DokkanResponse initLinks();
+    public DokkanResponse initLinks() {
+        try {
+            syncDataService.initLinks();
+        }catch (DokkanBizException e){
+            log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
+            return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
+        } catch (Exception e) {
+            log.error("DokkanDataServiceImpl#initLinks error,",e);
+            return DokkanResponse.builder().fail();
+        }
+        return DokkanResponse.builder().success();
+    }
 }
