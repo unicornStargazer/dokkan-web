@@ -77,12 +77,12 @@ public class CardListResponse implements Serializable {
     /**
      * 分类 逗号分割
      */
-    private List<String> categories;
+    private List<String> categoryList;
 
     /**
      * 链接
      */
-    private List<String> links;
+    private List<String> linkList;
 
 
 }

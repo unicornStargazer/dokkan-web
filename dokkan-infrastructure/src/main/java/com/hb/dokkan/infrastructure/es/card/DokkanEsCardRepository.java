@@ -52,18 +52,17 @@ public class DokkanEsCardRepository {
         }
         if (CollectionUtils.isNotEmpty(queryOption.getLinks())) {
             if (queryOption.getLinkMatchType().equals("0")) {
-                wrapper.and(
-                        w -> queryOption.getLinks().forEach(link -> w.like(CardEsPO::getLinks, link))
-                )
+                queryOption.getLinks().forEach(link -> wrapper.and(w -> w.like(CardEsPO::getLinks, link)));
             }else {
-                wrapper.in(CardEsPO::getLinks, queryOption.getLinks());
+                queryOption.getLinks().forEach(link -> wrapper.or(w -> w.like(CardEsPO::getLinks, link)));
             }
         }
         if (CollectionUtils.isNotEmpty(queryOption.getCategories())) {
             if (queryOption.getCategoryMatchType().equals("0")) {
-                wrapper.and(w -> queryOption.getCategories().forEach(category -> w.eq(CardEsPO::getCategories, category)));
+                queryOption.getCategories().forEach(category -> wrapper.and(w -> w.like(CardEsPO::getCategories, category)));
             }else {
-                wrapper.in(CardEsPO::getCategories, queryOption.getCategories());
+                queryOption.getCategories().forEach(category -> wrapper.or(w -> w.like(CardEsPO::getCategories, category)));
+
             }
         }
         EsPageInfo<CardEsPO> esPage = dokkanEsCardMapper.pageQuery(wrapper, queryOption.getPageNum(), queryOption.getPageSize());

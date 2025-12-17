@@ -1,15 +1,16 @@
 package com.hb.dokkan.service.convert;
 
+import com.google.common.collect.Lists;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
+import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
 import com.hb.dokkan.common.domain.response.cards.CardListResponse;
-import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
-import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
-import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
 import com.hb.dokkan.common.domain.vo.cards.CardListVO;
-import org.mapstruct.Builder;
-import org.mapstruct.Mapper;
+import org.mapstruct.*;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @Description 卡片转换类
@@ -31,6 +32,10 @@ public interface DokkanCardConvert {
     /**
      * 卡片列表VO转换为响应
      */
+    @Mappings({
+            @Mapping(source = "categories", target = "categoryList", qualifiedByName = "convertStringToList"),
+            @Mapping(source = "links", target = "linkList", qualifiedByName = "convertStringToList")
+            })
     CardListResponse listVoToResponse(CardListVO cardListVO);
 
     /**
@@ -42,4 +47,12 @@ public interface DokkanCardConvert {
      * es卡片列表PO转换为VO
      */
     List<CardListVO> convertToCardListVO(List<CardEsPO> cardEsPOS);
+
+    @Named("convertStringToList")
+    default List<String> convertStringToList(String str) {
+        if (Objects.isNull(str)) {
+            return Lists.newArrayList();
+        }
+        return Lists.newArrayList(str.split(","));
+    }
 }

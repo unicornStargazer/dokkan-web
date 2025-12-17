@@ -2,11 +2,12 @@ package com.hb.dokkan.common.domain.po.es.cards;
 
 import com.hb.dokkan.common.domain.po.mysql.cards.SkillPO;
 import com.hb.dokkan.common.domain.po.mysql.cards.SpecialPO;
+import com.hb.dokkan.config.es.CommaAnalyzerSettingProvider;
 import lombok.Data;
 import org.dromara.easyes.annotation.IndexField;
 import org.dromara.easyes.annotation.IndexId;
 import org.dromara.easyes.annotation.IndexName;
-import org.dromara.easyes.annotation.rely.Analyzer;
+import org.dromara.easyes.annotation.Settings;
 import org.dromara.easyes.annotation.rely.FieldType;
 import org.dromara.easyes.annotation.rely.IdType;
 
@@ -22,6 +23,7 @@ import java.util.Map;
  **/
 @IndexName("dokkan_card")
 @Data
+@Settings(settingsProvider = CommaAnalyzerSettingProvider.class)
 public class CardEsPO implements Serializable {
     private static final long serialVersionUID = 855741494833271157L;
 
@@ -120,12 +122,13 @@ public class CardEsPO implements Serializable {
     /**
      * 分类 逗号分割
      */
-    @IndexField(fieldType = FieldType.TEXT,analyzer = Analyzer.PATTERN, searchAnalyzer = Analyzer.PATTERN)
+    @IndexField(fieldType = FieldType.KEYWORD_TEXT,analyzer = "comma_analyzer", searchAnalyzer = "comma_analyzer")
     private String categories;
 
     /**
      * 链接
      */
+    @IndexField(fieldType = FieldType.KEYWORD_TEXT,analyzer = "comma_analyzer", searchAnalyzer = "comma_analyzer")
     private String links;
 
     /**
