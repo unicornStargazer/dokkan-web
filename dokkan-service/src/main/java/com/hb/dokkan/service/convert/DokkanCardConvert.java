@@ -5,7 +5,9 @@ import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
 import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
+import com.hb.dokkan.common.domain.response.cards.CardDetailResponse;
 import com.hb.dokkan.common.domain.response.cards.CardListResponse;
+import com.hb.dokkan.common.domain.vo.cards.CardDetailVO;
 import com.hb.dokkan.common.domain.vo.cards.CardListVO;
 import org.mapstruct.*;
 
@@ -55,4 +57,14 @@ public interface DokkanCardConvert {
         }
         return Lists.newArrayList(str.split(","));
     }
+
+    /**
+     * 卡片详情VO转换为响应
+     */
+    CardDetailResponse detailVoToResponse(CardDetailVO cardDetailVO);
+
+    /**
+     * es卡片详情PO转换为VO
+     */
+    CardDetailVO convertToCardDetailVO(CardEsPO cardEsPO);
 }

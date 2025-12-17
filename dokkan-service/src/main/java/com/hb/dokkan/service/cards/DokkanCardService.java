@@ -1,24 +1,26 @@
 package com.hb.dokkan.service.cards;
 
 import com.google.common.collect.Lists;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
+import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
+import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
+import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.common.domain.response.base.PageResponse;
+import com.hb.dokkan.common.domain.vo.cards.CardDetailVO;
+import com.hb.dokkan.common.domain.vo.cards.CardListVO;
 import com.hb.dokkan.common.utils.CollectionUtils;
 import com.hb.dokkan.common.utils.StringUtils;
 import com.hb.dokkan.infrastructure.es.card.DokkanEsCardRepository;
-import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
-import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
-import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
-import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.service.convert.DokkanCardConvert;
-import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
-import com.hb.dokkan.common.domain.vo.cards.CardListVO;
 import jakarta.annotation.Resource;
 import org.dromara.easyes.core.biz.EsPageInfo;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -84,5 +86,21 @@ public class DokkanCardService{
         cardQueryConditionDTO.setCategories(categories);
         cardQueryConditionDTO.setLinks(links);
         return cardQueryConditionDTO;
+    }
+
+    /**
+     * 查询卡片详情
+     */
+    public CardDetailVO cardDetail(CardQueryOptionDTO queryOption) {
+        CardQueryConditionDTO cardQueryConditionDTO = cardConvert.convertToEsQueryCondition(queryOption);
+        if (Objects.isNull(cardQueryConditionDTO)) {
+            return null;
+        }
+        Optional<CardEsPO> optional = dokkanEsCardRepository.queryCardDetail(cardQueryConditionDTO);
+        if (optional.isEmpty()) {
+            return null;
+        }
+        CardEsPO cardEsPO = optional.get();
+        return cardConvert.convertToCardDetailVO(cardEsPO);
     }
 }

@@ -13,6 +13,7 @@ import org.dromara.easyes.core.conditions.select.LambdaEsQueryWrapper;
 import org.dromara.easyes.core.kernel.EsWrappers;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -70,4 +71,16 @@ public class DokkanEsCardRepository {
     }
 
 
+    /**
+     * 查询卡片详情
+     */
+    public Optional<CardEsPO> queryCardDetail(CardQueryConditionDTO cardQueryConditionDTO) {
+        LambdaEsQueryWrapper<CardEsPO> wrapper = EsWrappers.lambdaQuery(CardEsPO.class);
+        wrapper.eq(CardEsPO::getCardId, cardQueryConditionDTO.getCardId());
+        List<CardEsPO> cardEsPOS = dokkanEsCardMapper.selectList(wrapper);
+        if (CollectionUtils.isEmpty(cardEsPOS)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(cardEsPOS.getFirst());
+    }
 }

@@ -1,15 +1,17 @@
 package com.hb.dokkan.service;
 
-import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
-import com.hb.dokkan.common.domain.response.cards.CardListResponse;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
+import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
+import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.domain.response.base.PageResponse;
+import com.hb.dokkan.common.domain.response.cards.CardDetailResponse;
+import com.hb.dokkan.common.domain.response.cards.CardListResponse;
+import com.hb.dokkan.common.domain.vo.cards.CardDetailVO;
+import com.hb.dokkan.common.domain.vo.cards.CardListVO;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.service.cards.DokkanCardService;
 import com.hb.dokkan.service.convert.DokkanCardConvert;
-import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
-import com.hb.dokkan.common.domain.vo.cards.CardListVO;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
 
@@ -51,6 +53,21 @@ public class DokkanCardDelegate {
                 .build();
         return DokkanResponse.<PageResponse<CardListResponse>>builder()
                 .withModel(pageResponse)
+                .success();
+    }
+
+    /**
+     * 卡片详情
+     */
+    public DokkanResponse<CardDetailResponse> cardDetail(CardQueryRequest request) {
+        if (Objects.isNull(request) || Objects.isNull(request.getCardId())) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
+        CardQueryOptionDTO queryOption = dokkanCardConvert.queryRequestToDto(request);
+        CardDetailVO cardDetailVO = cardService.cardDetail(queryOption);
+        CardDetailResponse response = dokkanCardConvert.detailVoToResponse(cardDetailVO);
+        return DokkanResponse.<CardDetailResponse>builder()
+                .withModel(response)
                 .success();
     }
 }
