@@ -2,17 +2,18 @@ package com.hb.dokkan.service.job.sync.strategy.strategies;
 
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Lists;
-import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import com.hb.dokkan.common.utils.JsonUtils;
-import com.hb.dokkan.common.utils.TranslationUtils;
-import com.hb.dokkan.config.http.HttpPoolProperties;
-import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
 import com.hb.dokkan.common.domain.dto.data.wiki.AwakeningInfoDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.CardInfoSyncCardDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardBaseInfoDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardDTO;
+import com.hb.dokkan.common.enums.CardAwakeningTypeEnum;
 import com.hb.dokkan.common.enums.CardRarityEnum;
+import com.hb.dokkan.common.exception.domain.DokkanBizException;
+import com.hb.dokkan.common.utils.JsonUtils;
+import com.hb.dokkan.common.utils.TranslationUtils;
+import com.hb.dokkan.config.http.HttpPoolProperties;
+import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.service.facade.WikiFacade;
 import com.hb.dokkan.service.helper.WikiCardHelper;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
@@ -21,6 +22,7 @@ import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -96,7 +98,8 @@ public class WikiCardStrategy implements WikiInfoStrategy {
             HttpPoolProperties.Concurrency concurrencyConfig = httpPoolProperties.getConcurrency();
             int batchSize = concurrencyConfig.getBatchSize();
             List<WikiCardDTO> allResult = Lists.newArrayList();
-
+            List<Long> errorIds = Lists.newArrayList();
+            List<Long> specialCardIds = Lists.newArrayList();
             for (int i = 0; i < cardIds.size(); i+= batchSize) {
                 int endIndex = Math.min(i + batchSize, cardIds.size());
 
@@ -104,14 +107,14 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
                 log.info("处理器:{} 批, 数量:{}", (i / batchSize + 1), batchCardIds.size());
 
-                List<CompletableFuture<WikiCardDTO>> completableFutures = cardIds.stream()
+                    List<CompletableFuture<WikiCardDTO>> completableFutures = cardIds.stream()
                         // CompletableFuture进行并行编排指定自定义的线程池
                         .map(cardId -> CompletableFuture
                                 .supplyAsync(() -> {
                                     try{
                                         semaphore.acquire();
                                         WikiCardDTO wikiCardDTO = wikiFacade.getWikiCard(String.valueOf(cardId));
-                                        if (filterCard(wikiCardDTO)) {
+                                        if (filterCard(wikiCardDTO, specialCardIds)) {
                                             WikiCardDTO insertCard = TranslationUtils.toSimpleChinese(wikiCardDTO);
                                             // 日志可以保留，但要注意日志本身也可能成为瓶颈
                                             log.info("card:{}", JSON.toJSONString(Objects.requireNonNull(insertCard).getCard()));
@@ -120,6 +123,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                                         return null;
                                     }catch (Exception e) {
                                         log.error("获取卡片异常 cardId:{}", cardId, e);
+                                        errorIds.add(cardId);
                                         return null;
                                     }finally {
                                         semaphore.release();
@@ -136,6 +140,8 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                 log.info("第 {} 批处理完成 获取到{}个有效卡片", (i / batchSize + 1), batchCardIds.size());
 
             }
+            log.error("获取卡片失败， 失败数量:{}, 失败卡片:{}", errorIds.size(), errorIds);
+            log.info("特殊处理卡， 数量:{}， 卡片:{}", specialCardIds.size(), specialCardIds);
             log.info("获取卡片成功， 总共获取{}个卡片", allResult.size());
             return allResult;
 
@@ -146,24 +152,64 @@ public class WikiCardStrategy implements WikiInfoStrategy {
         }
     }
 
-    public boolean filterCard(WikiCardDTO card) {
+    public boolean filterCard(WikiCardDTO card, List<Long> specialCardIds) {
         if (Objects.isNull(card) || Objects.isNull(card.getCard()) || CollectionUtils.isEmpty(card.getAwakeningRoutes())) {
             return false;
         }
 
         WikiCardBaseInfoDTO cardDetail = card.getCard();
-        if (cardDetail.getId() == 4017791 || cardDetail.getId() == 4030811) {
+        if (StringUtils.isAnyBlank(cardDetail.getLeaderSkill(),cardDetail.getPassiveSkillDesc()) || CollectionUtils.isEmpty(card.getCardLinks()) ||
+        CollectionUtils.isEmpty(card.getCategories()) || CollectionUtils.isEmpty(card.getSpecials())) {
             return false;
         }
-        if (cardDetail.getId() == 1003310) {
+        if (cardDetail.getId() == 4017791 || cardDetail.getId() == 4030811) {
+            cardDetail.setFreeCardFlag(Boolean.TRUE);
             return true;
         }
-        boolean rarityFlag = Boolean.TRUE.equals(cardDetail.getDokkanFesFlag()) || Boolean.TRUE.equals(cardDetail.getCarnivalFlag())
-                || (Boolean.TRUE.equals(CardRarityEnum.isLrCard(cardDetail.getRarity())) && Boolean.FALSE.equals(cardDetail.getFreeCardFlag()));
-        AwakeningInfoDTO lastAwaken = card.getAwakeningRoutes().getLast();
-        boolean awakenFlag = cardDetail.getId().equals(lastAwaken.getAwakedCardId())
-                && Objects.nonNull(cardDetail.getCost()) && cardDetail.getCost() >= 40;
+        if (cardDetail.getId() == 1003310 || cardDetail.getId() == 1003771) {
+            return false;
+        }
+        if (cardDetail.getId() == 1003311) {
+            return true;
+        }
+        boolean rarityFlag = Objects.nonNull(cardDetail.getRarity()) && cardDetail.getRarity() > CardRarityEnum.SSR.getRarity();
+
+        boolean awakenFlag = filterAwakenCard(card.getAwakeningRoutes(), cardDetail, specialCardIds);
         return awakenFlag && rarityFlag;
+    }
+
+    /**
+     * 过滤出是dk觉醒后的卡
+     */
+    private boolean filterAwakenCard(List<AwakeningInfoDTO> awakeningRoutes, WikiCardBaseInfoDTO card, List<Long> specialCardIds) {
+        // 变身后的卡
+        if (awakeningRoutes.size() == 1) {
+            if (BooleanUtils.isTrue(card.getFreeCardFlag())) {
+                log.warn("特殊卡，记下来，后续处理 cardId:{}", card.getId());
+                specialCardIds.add(card.getId());
+                return false;
+            }
+            return true;
+        }
+        List<AwakeningInfoDTO> sortedList = awakeningRoutes.stream()
+                .filter(awakeningInfoDTO -> CardAwakeningTypeEnum.DOKKAN_AWAKENING.getType().equals(
+                        awakeningInfoDTO.getAwakenDetail().getType()))
+                .sorted((o1, o2) -> {
+                            AwakeningInfoDTO.AwakenDetailDTO awakenDetail1 = o1.getAwakenDetail();
+                            AwakeningInfoDTO.AwakenDetailDTO awakenDetail2 = o2.getAwakenDetail();
+                            int rarityCompare = Integer.compare(awakenDetail1.getRarity(), awakenDetail2.getRarity());
+                            if (rarityCompare != 0) {
+                                return rarityCompare;
+                            }
+                            return awakenDetail2.getOpenAt().compareTo(awakenDetail1.getOpenAt());
+                        }
+                )
+                .toList();
+        if (CollectionUtils.isEmpty(sortedList)) {
+            return false;
+        }
+        AwakeningInfoDTO lastCard = sortedList.getLast();
+        return lastCard.getAwakedCardId().equals(card.getId());
     }
 
     @PostConstruct

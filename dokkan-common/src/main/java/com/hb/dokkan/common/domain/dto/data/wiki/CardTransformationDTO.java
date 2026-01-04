@@ -66,14 +66,14 @@ public class CardTransformationDTO {
         private String transformCondition;
 
         @Override
-        public boolean equals(Object object) {
-            if (!(object instanceof NextCardDTO that)) return false;
-            return Objects.equal(id, that.id) && Objects.equal(name, that.name) && Objects.equal(baseId, that.baseId);
+        public boolean equals(Object o) {
+            if (!(o instanceof NextCardDTO that)) return false;
+            return type == that.type && Objects.equal(id, that.id) && Objects.equal(name, that.name) && Objects.equal(transformCondition, that.transformCondition);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hashCode(id, name, baseId);
+            return Objects.hashCode(id, name, type, transformCondition);
         }
     }
 }

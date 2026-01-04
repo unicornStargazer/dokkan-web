@@ -36,7 +36,7 @@ public class WikiCardBaseInfoDTO implements Serializable {
     private Integer cost;
 
     /**
-     * @see com.hb.dokkan.service.enums.CardRarityEnum
+     * @see com.hb.dokkan.common.enums.CardRarityEnum
      */
     private Integer rarity;
 

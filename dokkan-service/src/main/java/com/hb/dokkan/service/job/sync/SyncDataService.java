@@ -3,23 +3,6 @@ package com.hb.dokkan.service.job.sync;
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Maps;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
-import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
-import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
-import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanEzaCardRepository;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanSkillRepository;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanSpecialRepository;
-import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.EzaCardPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.SkillPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.SpecialPO;
-import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
-import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
-import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
-import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
-import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
 import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoDTO;
 import com.hb.dokkan.common.domain.dto.data.cards.EzaCardInfoDTO;
@@ -27,6 +10,23 @@ import com.hb.dokkan.common.domain.dto.data.cards.SkillDTO;
 import com.hb.dokkan.common.domain.dto.data.cards.SpecialAttackDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCategoryDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiLinkDTO;
+import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.EzaCardPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.SkillPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.SpecialPO;
+import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
+import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
+import com.hb.dokkan.common.exception.domain.DokkanBizException;
+import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
+import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanEzaCardRepository;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanSkillRepository;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanSpecialRepository;
+import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
+import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
+import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.service.helper.EsCardSyncHelper;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
@@ -248,6 +248,7 @@ public class SyncDataService{
     }
 
     private void insertCardBaseInfo(List<CardBaseInfoDTO> cards) {
+
         List<CardBaseInfoDTO> distinctedList = distinctList(cards);
         List<CardPO> cardModel = convert.wikiCard2POList(distinctedList);
         checkParam(cardModel);

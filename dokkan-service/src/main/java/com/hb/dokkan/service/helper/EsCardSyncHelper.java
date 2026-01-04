@@ -202,10 +202,10 @@ public class EsCardSyncHelper {
         if (!CollectionUtils.isEmpty(attributes.getNextCards())) {
             attributes.getNextCards().stream()
                     .filter(nextCard ->
-                            esCardPO.getCardId().equals(nextCard.getBaseId()))
+                            esCardPO.getCardId().equals(nextCard.getStartCardId()))
                     .findAny()
                     .ifPresent(nextCard ->
-                            esCardPO.setNextCardId(nextCard.getId()));
+                            esCardPO.setNextCardId(nextCard.getNextCardId()));
         }
     }
 

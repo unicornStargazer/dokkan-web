@@ -3,8 +3,6 @@ package com.hb.dokkan.common.enums;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-import java.util.Objects;
-
 /**
  * @Description 稀有度枚举
  * @Author stargazer
@@ -27,12 +25,5 @@ public enum CardRarityEnum{
     LR(5);
 
     private final int rarity;
-
-    public static Boolean isLrCard(Number rarity) {
-        if (Objects.isNull(rarity)) {
-            return false;
-        }
-        return CardRarityEnum.LR.rarity == rarity.intValue();
-    }
 
 }
