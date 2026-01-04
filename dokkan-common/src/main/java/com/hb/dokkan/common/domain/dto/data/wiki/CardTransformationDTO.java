@@ -25,6 +25,12 @@ public class CardTransformationDTO {
     private Long nextCardId;
 
     /**
+     * 前一形态卡牌id
+     */
+    @JsonProperty("start_card_id")
+    private Long startCardId;
+
+    /**
      * 变身后卡牌信息
      */
     @JsonProperty("next_card")
@@ -47,11 +53,17 @@ public class CardTransformationDTO {
          * 变身后卡牌名称
          */
         private String name;
+
         /**
-         * 初始卡面id
+         * 变身类型:131-双向交替 103-变身  79-巨大化
          */
-        @JsonProperty("base_id")
-        private Long baseId;
+        private int type;
+
+        /**
+         * 变身条件
+         */
+        @JsonProperty("description")
+        private String transformCondition;
 
         @Override
         public boolean equals(Object object) {

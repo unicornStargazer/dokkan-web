@@ -201,9 +201,11 @@ public class EsCardSyncHelper {
         esCardPO.setPotentials(dokkanEsSyncConvert.convert2PotentialDTO(attributes.getPotential()));
         if (!CollectionUtils.isEmpty(attributes.getNextCards())) {
             attributes.getNextCards().stream()
-                    .filter(nextCard -> esCardPO.getCardId().equals(nextCard.getBaseId()))
+                    .filter(nextCard ->
+                            esCardPO.getCardId().equals(nextCard.getBaseId()))
                     .findAny()
-                    .ifPresent(nextCard -> esCardPO.setNextCardId(nextCard.getId()));
+                    .ifPresent(nextCard ->
+                            esCardPO.setNextCardId(nextCard.getId()));
         }
     }
 

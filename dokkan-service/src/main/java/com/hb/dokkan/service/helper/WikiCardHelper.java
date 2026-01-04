@@ -148,8 +148,7 @@ public class WikiCardHelper {
         attribute.setFinishSkillIds(finishSkillIds);
         attribute.setSpecialSkillIds(specialIds);
         if (!CollectionUtils.isEmpty(wikiCard.getTransformations())) {
-            List<CardTransformationDTO.NextCardDTO> nextCardDTOS = wikiCard.getTransformations().stream().map(CardTransformationDTO::getNextCard).toList();
-            attribute.setNextCards(nextCardDTOS);
+            attribute.setNextCards(wikiCard.getTransformations());
         }
         return JSON.toJSONString(attribute);
     }

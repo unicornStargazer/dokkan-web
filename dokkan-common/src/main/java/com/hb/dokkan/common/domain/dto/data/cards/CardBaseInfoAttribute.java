@@ -101,7 +101,7 @@ public class CardBaseInfoAttribute implements Serializable {
     /**
      * 变身后信息
      */
-    private List<CardTransformationDTO.NextCardDTO> nextCards;
+    private List<CardTransformationDTO> nextCards;
 
     /**
      * 必杀id
