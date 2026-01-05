@@ -82,4 +82,20 @@ public class DokkanDataDelegate {
         }
         return DokkanResponse.builder().success();
     }
+
+    /**
+     * 修复数据库数据
+     */
+    public DokkanResponse fixDbData(Integer fixType) {
+        try {
+            syncDataService.fixDbData(fixType);
+        }catch (DokkanBizException e){
+            log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
+            return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
+        } catch (Exception e) {
+            log.error("DokkanDataServiceImpl#fixDbData error,",e);
+            return DokkanResponse.builder().fail();
+        }
+        return DokkanResponse.builder().success();
+    }
 }

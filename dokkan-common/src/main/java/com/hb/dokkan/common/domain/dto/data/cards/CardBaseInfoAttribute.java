@@ -1,7 +1,7 @@
 package com.hb.dokkan.common.domain.dto.data.cards;
 
 import com.google.common.base.Objects;
-import com.hb.dokkan.common.domain.dto.data.wiki.CardTransformationDTO;
+import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardTransformationDTO;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -101,7 +101,7 @@ public class CardBaseInfoAttribute implements Serializable {
     /**
      * 变身后信息
      */
-    private List<CardTransformationDTO> nextCards;
+    private List<WikiCardTransformationDTO> nextCards;
 
     /**
      * 必杀id

@@ -12,6 +12,7 @@ import com.hb.dokkan.common.enums.CardRarityEnum;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.common.utils.TranslationUtils;
+import com.hb.dokkan.config.data.WikiCardFilter;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.service.facade.WikiFacade;
@@ -57,6 +58,9 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
     @Resource
     private WikiCardHelper wikiCardHelper;
+
+    @Resource
+    private WikiCardFilter cardFilter;
 
 
     /**
@@ -140,6 +144,11 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                 log.info("第 {} 批处理完成 获取到{}个有效卡片", (i / batchSize + 1), batchCardIds.size());
 
             }
+            CompletableFuture.supplyAsync(()  -> {
+                JsonUtils.writeJson2File(JSON.toJSONString(errorIds), "E:/IDEA Project/dokkan-web/dokkan-start/src/main/resources/error/error_card.json");
+                JsonUtils.writeJson2File(JSON.toJSONString(specialCardIds), "E:/IDEA Project/dokkan-web/dokkan-start/src/main/resources/error/special_card.json");
+                return null;
+            });
             log.error("获取卡片失败， 失败数量:{}, 失败卡片:{}", errorIds.size(), errorIds);
             log.info("特殊处理卡， 数量:{}， 卡片:{}", specialCardIds.size(), specialCardIds);
             log.info("获取卡片成功， 总共获取{}个卡片", allResult.size());
@@ -159,18 +168,14 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
         WikiCardBaseInfoDTO cardDetail = card.getCard();
         if (StringUtils.isAnyBlank(cardDetail.getLeaderSkill(),cardDetail.getPassiveSkillDesc()) || CollectionUtils.isEmpty(card.getCardLinks()) ||
-        CollectionUtils.isEmpty(card.getCategories()) || CollectionUtils.isEmpty(card.getSpecials())) {
+        CollectionUtils.isEmpty(card.getCategories())) {
             return false;
         }
-        if (cardDetail.getId() == 4017791 || cardDetail.getId() == 4030811) {
-            cardDetail.setFreeCardFlag(Boolean.TRUE);
+        if (cardFilter.getWikiCardWhiteList().contains(cardDetail.getId())) {
             return true;
         }
-        if (cardDetail.getId() == 1003310 || cardDetail.getId() == 1003771) {
+        if (cardFilter.getWikiCardBlackList().contains(cardDetail.getId())) {
             return false;
-        }
-        if (cardDetail.getId() == 1003311) {
-            return true;
         }
         boolean rarityFlag = Objects.nonNull(cardDetail.getRarity()) && cardDetail.getRarity() > CardRarityEnum.SSR.getRarity();
 
@@ -183,8 +188,8 @@ public class WikiCardStrategy implements WikiInfoStrategy {
      */
     private boolean filterAwakenCard(List<AwakeningInfoDTO> awakeningRoutes, WikiCardBaseInfoDTO card, List<Long> specialCardIds) {
         // 变身后的卡
-        if (awakeningRoutes.size() == 1) {
-            if (BooleanUtils.isTrue(card.getFreeCardFlag())) {
+        if (awakeningRoutes.size() == 1 ) {
+            if (BooleanUtils.isTrue(card.getFreeCardFlag()) && CardRarityEnum.LR.getRarity() != card.getRarity()) {
                 log.warn("特殊卡，记下来，后续处理 cardId:{}", card.getId());
                 specialCardIds.add(card.getId());
                 return false;

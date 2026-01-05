@@ -57,7 +57,7 @@ public class WikiCardDTO {
     /**
      * 变身相关
      */
-    private List<CardTransformationDTO> transformations;
+    private List<WikiCardTransformationDTO> transformations;
 
     /**
      * 下拉释放

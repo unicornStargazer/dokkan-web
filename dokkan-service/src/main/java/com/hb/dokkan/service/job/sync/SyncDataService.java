@@ -28,7 +28,9 @@ import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
 import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.service.helper.EsCardSyncHelper;
+import com.hb.dokkan.service.job.sync.factory.FixDataStrategyFactory;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
+import com.hb.dokkan.service.job.sync.strategy.FixDataStrategy;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
@@ -90,6 +92,9 @@ public class SyncDataService{
 
     @Resource
     private EsCardSyncHelper esCardSyncHelper;
+
+    @Resource
+    private FixDataStrategyFactory fixDataStrategyFactory;
 
 
     /**
@@ -268,5 +273,17 @@ public class SyncDataService{
                 throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR);
             }
         });
+    }
+
+    /**
+     * 修复数据库数据
+     */
+    public void fixDbData(Integer fixType) {
+        FixDataStrategy fixDataStrategy = fixDataStrategyFactory.getFixDataStrategy(fixType);
+        if (Objects.isNull(fixDataStrategy)) {
+            log.error("fixDataStrategy is null,fixType:{}", fixType);
+            throw new DokkanBizException(ExceptionErrorCode.HAS_NO_STRATEGY);
+        }
+        fixDataStrategy.fixData();
     }
 }

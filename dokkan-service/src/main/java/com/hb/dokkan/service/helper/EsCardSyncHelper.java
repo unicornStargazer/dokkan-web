@@ -156,6 +156,7 @@ public class EsCardSyncHelper {
         if (CollectionUtils.isEmpty(ezaCardPOS)) {
             esCardPO.setEzaFlag(false);
             esCardPO.setSuperEzaFlag(false);
+            return;
         }
         List<EzaCardPO> currentEzaCards = ezaCardPOS.stream()
                 .filter(ezaCardPO -> esCardPO.getCardId().equals(ezaCardPO.getCardId()))
@@ -164,6 +165,7 @@ public class EsCardSyncHelper {
         if (CollectionUtils.isEmpty(currentEzaCards)) {
             esCardPO.setEzaFlag(false);
             esCardPO.setSuperEzaFlag(false);
+            return;
         }
         esCardPO.setEzaFlag(true);
         esCardPO.setSuperEzaFlag(currentEzaCards.size() > 1);

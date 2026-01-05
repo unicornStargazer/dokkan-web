@@ -16,7 +16,7 @@ import lombok.*;
 @Builder
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class CardTransformationDTO {
+public class WikiCardTransformationDTO {
 
     /**
      * 变身后卡牌id

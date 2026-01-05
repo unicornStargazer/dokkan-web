@@ -3,9 +3,7 @@ package com.hb.dokkan.api.data;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.service.DokkanDataDelegate;
 import jakarta.annotation.Resource;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @Description card服务
@@ -52,6 +50,14 @@ public class DokkanDataApi {
     @PostMapping("/init-link")
     public DokkanResponse initLinks(){
         return dataDelegate.initLinks();
+    }
+
+    /**
+     * 修复数据库数据
+     */
+    @GetMapping("/fix-db-data/{fixType}")
+    public DokkanResponse fixDbData(@PathVariable("fixType") Integer fixType) {
+        return dataDelegate.fixDbData(fixType);
     }
 
 
