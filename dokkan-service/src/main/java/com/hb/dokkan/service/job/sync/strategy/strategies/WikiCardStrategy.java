@@ -145,8 +145,8 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
             }
             CompletableFuture.supplyAsync(()  -> {
-                JsonUtils.writeJson2File(JSON.toJSONString(errorIds), "E:/IDEA Project/dokkan-web/dokkan-start/src/main/resources/error/error_card.json");
-                JsonUtils.writeJson2File(JSON.toJSONString(specialCardIds), "E:/IDEA Project/dokkan-web/dokkan-start/src/main/resources/error/special_card.json");
+                JsonUtils.writeJson2File(JSON.toJSONString(errorIds), "E:/IDEA Project/dokkan-web/dokkan-starter/src/main/resources/error/error_card.json");
+                JsonUtils.writeJson2File(JSON.toJSONString(specialCardIds), "E:/IDEA Project/dokkan-web/dokkan-starter/src/main/resources/error/special_card.json");
                 return null;
             });
             log.error("获取卡片失败， 失败数量:{}, 失败卡片:{}", errorIds.size(), errorIds);
