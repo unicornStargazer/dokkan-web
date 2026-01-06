@@ -11,4 +11,9 @@ public interface EsCardAttributeKey {
      * 排序时间
      */
     String ORDER_BY_TIME =  "orderByTime";
+
+    /**
+     * 变身信息
+     */
+    String TRANSFORMATIONS = "transformations";
 }
