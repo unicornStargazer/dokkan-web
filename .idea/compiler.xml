@@ -14,6 +14,7 @@
         <module name="dokkan-infrastructure" />
         <module name="dokkan-api" />
         <module name="dokkan-dependencies" />
+        <module name="dokkan-agent" />
         <module name="dokkan-service" />
         <module name="dokkan-starter" />
       </profile>
