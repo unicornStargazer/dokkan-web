@@ -1,2 +1,0 @@
-# dokkan-web
-dokkan-framework

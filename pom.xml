@@ -26,7 +26,6 @@
         <opencc4j.version>1.6.2</opencc4j.version>
         <elasticsearch.version>7.17.28</elasticsearch.version>
         <easy-es.version>3.0.0</easy-es.version>
-        <dashscope.version>2.20.6</dashscope.version>
     </properties>
 
     <dependencyManagement>
@@ -67,26 +66,7 @@
                 <artifactId>dokkan-dependencies</artifactId>
                 <version>${dokkan.version}</version>
             </dependency>
-
-            <dependency>
-                <groupId>com.hb.dokkan</groupId>
-                <artifactId>dokkan-agent</artifactId>
-                <version>${dokkan.version}</version>
-            </dependency>
             <!--内部依赖 end-->
-
-            <!-- Agent 框架相关依赖 -->
-            <dependency>
-                <groupId>com.alibaba</groupId>
-                <artifactId>dashscope-sdk-java</artifactId>
-                <version>${dashscope.version}</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>org.slf4j</groupId>
-                        <artifactId>slf4j-simple</artifactId>
-                    </exclusion>
-                </exclusions>
-            </dependency>
 
             <!-- HikariCP连接池-->
             <dependency>
@@ -239,7 +219,6 @@
         <module>dokkan-service</module>
         <module>dokkan-infrastructure</module>
         <module>dokkan-dependencies</module>
-        <module>dokkan-agent</module>
     </modules>
 
 
