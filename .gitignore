@@ -4,7 +4,9 @@
 /httpRequests/
 # Datasource local storage ignored files
 **/target/**
-.idea/*
+.idea
 .claude
 *.md
+.aone_copilot
+.gemini
 
