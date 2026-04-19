@@ -9,5 +9,5 @@
 *.md
 .aone_copilot
 .gemini
-dokkan-web.iml
+*.iml
 
