@@ -9,6 +9,7 @@ import com.hb.dokkan.common.domain.response.cards.CardDetailResponse;
 import com.hb.dokkan.common.domain.response.cards.CardListResponse;
 import com.hb.dokkan.common.domain.vo.cards.CardDetailVO;
 import com.hb.dokkan.common.domain.vo.cards.CardListVO;
+import com.hb.dokkan.common.enums.CardRarityEnum;
 import org.mapstruct.*;
 
 import java.util.List;
@@ -36,6 +37,7 @@ public interface DokkanCardConvert {
      */
     @Mappings({
             @Mapping(source = "categories", target = "categoryList", qualifiedByName = "convertStringToList"),
+            @Mapping(source = "rarity", target = "rarity", qualifiedByName = "convertRarity"),
             @Mapping(source = "links", target = "linkList", qualifiedByName = "convertStringToList")
             })
     CardListResponse listVoToResponse(CardListVO cardListVO);
@@ -56,6 +58,14 @@ public interface DokkanCardConvert {
             return Lists.newArrayList();
         }
         return Lists.newArrayList(str.split(","));
+    }
+
+    @Named("convertRarity")
+    default String convertRarity(Integer rarity) {
+        if (Objects.isNull(rarity)) {
+            return null;
+        }
+        return CardRarityEnum.getEnumNameByRarity(rarity);
     }
 
     /**

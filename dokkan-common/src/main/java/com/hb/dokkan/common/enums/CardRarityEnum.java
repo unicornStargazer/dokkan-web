@@ -26,4 +26,22 @@ public enum CardRarityEnum{
 
     private final int rarity;
 
+    public static String getEnumByRarity(String rarity) {
+        for (CardRarityEnum cardRarityEnum : CardRarityEnum.values()) {
+            if (cardRarityEnum.name().equals(rarity)) {
+                return String.valueOf(cardRarityEnum.getRarity());
+            }
+        }
+        return null;
+    }
+
+    public static String getEnumNameByRarity(Integer rarity) {
+        for (CardRarityEnum cardRarityEnum : CardRarityEnum.values()) {
+            if (cardRarityEnum.getRarity() == rarity) {
+                return cardRarityEnum.name();
+            }
+        }
+        return null;
+    }
+
 }

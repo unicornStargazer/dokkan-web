@@ -1,5 +1,6 @@
 package com.hb.dokkan.service.cards;
 
+import cn.hutool.core.util.NumberUtil;
 import com.google.common.collect.Lists;
 import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
 import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
@@ -9,6 +10,7 @@ import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.common.domain.response.base.PageResponse;
 import com.hb.dokkan.common.domain.vo.cards.CardDetailVO;
 import com.hb.dokkan.common.domain.vo.cards.CardListVO;
+import com.hb.dokkan.common.enums.CardRarityEnum;
 import com.hb.dokkan.common.utils.CollectionUtils;
 import com.hb.dokkan.common.utils.StringUtils;
 import com.hb.dokkan.infrastructure.es.card.DokkanEsCardRepository;
@@ -82,6 +84,9 @@ public class DokkanCardService{
         CardQueryConditionDTO cardQueryConditionDTO = cardConvert.convertToEsQueryCondition(queryOption);
         if (StringUtils.isNotBlank(cardQueryConditionDTO.getPropType())) {
             cardQueryConditionDTO.setType(null);
+        }
+        if (!NumberUtil.isNumber(cardQueryConditionDTO.getRarity())) {
+            cardQueryConditionDTO.setRarity(CardRarityEnum.getEnumByRarity(cardQueryConditionDTO.getRarity()));
         }
         cardQueryConditionDTO.setCategories(categories);
         cardQueryConditionDTO.setLinks(links);

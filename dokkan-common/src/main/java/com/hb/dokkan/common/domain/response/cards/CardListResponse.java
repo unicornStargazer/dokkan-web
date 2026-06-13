@@ -43,7 +43,7 @@ public class CardListResponse implements Serializable {
     /**
      * 稀有度
      */
-    private Integer rarity;
+    private String rarity;
 
     /**
      * 发布时间
