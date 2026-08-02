@@ -1,5 +1,6 @@
 package com.hb.dokkan.api.cards;
 
+import com.alibaba.fastjson.JSON;
 import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.domain.response.base.PageResponse;
@@ -31,7 +32,7 @@ public class DokkanCardApi {
      */
     @PostMapping("/list")
     public DokkanResponse<PageResponse<CardListResponse>> cardList(@RequestBody CardQueryRequest request){
-        log.info("cardList request:{}",request);
+        log.info("cardList request:{}", JSON.toJSONString(request));
         return cardDelegate.cardList(request);
     }
 
@@ -40,7 +41,7 @@ public class DokkanCardApi {
      */
     @PostMapping("/detail")
     public DokkanResponse<CardDetailResponse> cardDetail(@RequestBody CardQueryRequest request){
-        log.info("cardDetail request:{}",request);
+        log.info("cardDetail request:{}",JSON.toJSONString(request));
         return cardDelegate.cardDetail(request);
     }
 

@@ -25,6 +25,7 @@ public class CardDetailVO implements Serializable {
      * 卡片id
      */
     private Long cardId;
+    private String cardIcon;
     /**
      * 卡片name
      */

@@ -36,7 +36,7 @@ public class DokkanMetaObjectHandler implements MetaObjectHandler {
     @Override
     public void updateFill(MetaObject metaObject) {
         // 更新时自动填充 updTm 字段
-        this.setFieldValByName("updTm",new Date(),metaObject);
-        this.setFieldValByName("updBy",getUser(),metaObject);
+        this.setFieldValByName("updateTime", new Date(), metaObject);
+        this.setFieldValByName("modifier", getUser(), metaObject);
     }
 }

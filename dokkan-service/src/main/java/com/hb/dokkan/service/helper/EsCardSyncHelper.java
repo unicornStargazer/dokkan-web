@@ -15,6 +15,7 @@ import com.hb.dokkan.common.utils.DateUtils;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.config.mybatis.IdGeneratorUtil;
 import com.hb.dokkan.service.convert.DokkanEsSyncConvert;
+import com.hb.dokkan.service.storage.CardIconStorageService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -39,6 +40,9 @@ public class EsCardSyncHelper {
     @Resource
     private DokkanEsSyncConvert dokkanEsSyncConvert;
 
+    @Resource
+    private CardIconStorageService cardIconStorageService;
+
     /**
      * 构建es卡片po
      */
@@ -58,6 +62,7 @@ public class EsCardSyncHelper {
             esCards.add(esCardPO);
             esCardPO.setId(IdGeneratorUtil.generate16CharUuidSimple());
             esCardPO.setCardId(card.getCardId());
+            esCardPO.setCardIcon(cardIconStorageService.saveCardIcon(card.getCardId()));
             esCardPO.setCardName(card.getCardName());
             esCardPO.setPropType(card.getPropType());
             esCardPO.setTitle(card.getTitle());

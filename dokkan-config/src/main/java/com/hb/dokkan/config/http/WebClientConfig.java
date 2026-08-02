@@ -55,14 +55,14 @@ public class WebClientConfig {
 
     @Bean("dokkanInfoWebClient")
     public WebClient infoWebClient() {
-        final int bufferSize = 10 * 1024 * 1024; // 10MB
+        HttpPoolProperties.WebClient config = httpPoolProperties.getWebClient();
+        final int bufferSize = config.getMaxInMemorySizeMb() * 1024 * 1024;
 
         final ExchangeStrategies strategies = ExchangeStrategies.builder()
                 .codecs(codecs -> codecs
                         .defaultCodecs()
                         .maxInMemorySize(bufferSize))
                 .build();
-        HttpPoolProperties.WebClient config = httpPoolProperties.getWebClient();
         ConnectionProvider connectionProvider = ConnectionProvider.builder("dokkan")
                 .maxConnections(config.getMaxConnections())
                 .maxIdleTime(Duration.ofSeconds(config.getMaxIdleTimeSeconds()))

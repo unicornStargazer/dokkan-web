@@ -1,5 +1,8 @@
 package com.hb.dokkan.api.data;
 
+import com.hb.dokkan.common.domain.request.cards.CardIdSyncRequest;
+import com.hb.dokkan.common.domain.request.data.SyncStartRequest;
+import com.hb.dokkan.common.domain.response.data.SyncProgressResponse;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.service.DokkanDataDelegate;
 import jakarta.annotation.Resource;
@@ -34,6 +37,25 @@ public class DokkanDataApi {
         return dataDelegate.syncEsCardData();
     }
 
+    /**
+     * Manually synchronize specified card IDs to MySQL, ES and object storage.
+     */
+    @PostMapping("/sync-card-by-ids")
+    public DokkanResponse<Integer> syncCardByIds(@RequestBody CardIdSyncRequest request) {
+        return dataDelegate.syncCardByIds(request);
+    }
+
+    /** Starts a background sync job. The returned job id can be polled for progress. */
+    @PostMapping("/sync-start")
+    public DokkanResponse<String> startSync(@RequestBody SyncStartRequest request) {
+        return dataDelegate.startSync(request);
+    }
+
+    /** Returns the current progress snapshot of a background sync job. */
+    @GetMapping("/sync-progress/{jobId}")
+    public DokkanResponse<SyncProgressResponse> syncProgress(@PathVariable String jobId) {
+        return dataDelegate.syncProgress(jobId);
+    }
 
     /**
      * 初始化分类数据

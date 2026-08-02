@@ -93,6 +93,11 @@
         </dependency>
         <!--http相关-->
 
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+        </dependency>
+
         <!--通用工具 start-->
         <dependency>
             <groupId>org.apache.commons</groupId>

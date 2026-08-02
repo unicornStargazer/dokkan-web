@@ -26,6 +26,7 @@
         <opencc4j.version>1.6.2</opencc4j.version>
         <elasticsearch.version>7.17.28</elasticsearch.version>
         <easy-es.version>3.0.0</easy-es.version>
+        <minio.version>8.5.17</minio.version>
     </properties>
 
     <dependencyManagement>
@@ -116,6 +117,11 @@
                 <groupId>org.dromara.easy-es</groupId>
                 <artifactId>easy-es-boot-starter</artifactId>
                 <version>${easy-es.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
             </dependency>
             <!--es相关-->
 

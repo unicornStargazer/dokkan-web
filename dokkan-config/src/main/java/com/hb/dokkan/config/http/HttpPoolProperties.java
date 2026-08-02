@@ -71,6 +71,11 @@ public class HttpPoolProperties {
 
         private int evictInBackgroundTimeSeconds = 5000;
 
+        /**
+         * Maximum response body size buffered by WebClient codecs, in MB.
+         */
+        private int maxInMemorySizeMb = 64;
+
     }
 
     @Data

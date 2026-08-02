@@ -17,6 +17,7 @@ import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.service.facade.WikiFacade;
 import com.hb.dokkan.service.helper.WikiCardHelper;
+import com.hb.dokkan.service.job.sync.SyncProgressContext;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
@@ -34,6 +35,7 @@ import org.springframework.util.CollectionUtils;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Semaphore;
 
 /**
@@ -97,13 +99,14 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                     .filter(card -> card.getId() < 5000021 && card.getRarity() > 3)
                     .map(CardInfoSyncCardDTO::getId)
                     .toList();
+            SyncProgressContext.update(12, "抓取外部数据", "发现 " + cardIds.size() + " 个候选 cardId");
             log.info("开始获取卡片信息， 总数量:{}", cardIds.size());
 
             HttpPoolProperties.Concurrency concurrencyConfig = httpPoolProperties.getConcurrency();
             int batchSize = concurrencyConfig.getBatchSize();
             List<WikiCardDTO> allResult = Lists.newArrayList();
-            List<Long> errorIds = Lists.newArrayList();
-            List<Long> specialCardIds = Lists.newArrayList();
+            List<Long> errorIds = new CopyOnWriteArrayList<>();
+            List<Long> specialCardIds = new CopyOnWriteArrayList<>();
             for (int i = 0; i < cardIds.size(); i+= batchSize) {
                 int endIndex = Math.min(i + batchSize, cardIds.size());
 
@@ -111,17 +114,18 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
                 log.info("处理器:{} 批, 数量:{}", (i / batchSize + 1), batchCardIds.size());
 
-                    List<CompletableFuture<WikiCardDTO>> completableFutures = cardIds.stream()
+                    List<CompletableFuture<WikiCardDTO>> completableFutures = batchCardIds.stream()
                         // CompletableFuture进行并行编排指定自定义的线程池
                         .map(cardId -> CompletableFuture
                                 .supplyAsync(() -> {
+                                    boolean acquired = false;
                                     try{
                                         semaphore.acquire();
+                                        acquired = true;
                                         WikiCardDTO wikiCardDTO = wikiFacade.getWikiCard(String.valueOf(cardId));
                                         if (filterCard(wikiCardDTO, specialCardIds)) {
                                             WikiCardDTO insertCard = TranslationUtils.toSimpleChinese(wikiCardDTO);
                                             // 日志可以保留，但要注意日志本身也可能成为瓶颈
-                                            log.info("card:{}", JSON.toJSONString(Objects.requireNonNull(insertCard).getCard()));
                                             return insertCard;
                                         }
                                         return null;
@@ -130,7 +134,9 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                                         errorIds.add(cardId);
                                         return null;
                                     }finally {
-                                        semaphore.release();
+                                        if (acquired) {
+                                            semaphore.release();
+                                        }
                                     }
                                 }, dokkanThreadPoolExecutor))
                         .toList();
@@ -141,6 +147,10 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                                 .toList())
                         .join();
                 allResult.addAll(batchResult);
+                int processed = endIndex;
+                int percent = 12 + Math.round(processed * 48f / Math.max(cardIds.size(), 1));
+                SyncProgressContext.update(percent, "抓取外部数据",
+                        "已处理 " + processed + "/" + cardIds.size() + "，有效卡片 " + allResult.size());
                 log.info("第 {} 批处理完成 获取到{}个有效卡片", (i / batchSize + 1), batchCardIds.size());
 
             }

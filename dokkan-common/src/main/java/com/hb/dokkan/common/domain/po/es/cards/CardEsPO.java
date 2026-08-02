@@ -40,6 +40,10 @@ public class CardEsPO implements Serializable {
      */
     private Long cardId;
     /**
+     * 卡片头像地址
+     */
+    private String cardIcon;
+    /**
      * 卡片name
      */
     private String cardName;

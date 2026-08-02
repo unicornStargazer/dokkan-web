@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
 import java.util.List;
+import java.util.Collections;
 import java.util.Optional;
 
 /**
@@ -66,7 +67,7 @@ public class WikiCardHelper {
                 List<SkillDTO> finishSkills = buildSkillDetail(wikiCardDTO.getFinishSkills());
                 Optional.ofNullable(finishSkills).ifPresent(skills::addAll);
             }
-            if (CollectionUtils.isEmpty(wikiCardDTO.getStandbySkills())) {
+            if (!CollectionUtils.isEmpty(wikiCardDTO.getStandbySkills())) {
                 List<SkillDTO> standbySkills = buildSkillDetail(wikiCardDTO.getStandbySkills());
                 Optional.ofNullable(standbySkills).ifPresent(skills::addAll);
             }
@@ -137,11 +138,11 @@ public class WikiCardHelper {
         WikiCardBaseInfoDTO card = wikiCard.getCard();
         CardBaseInfoAttribute attribute = convert.wikiCard2Attribute(card);
         attribute.setPotential(wikiCard.getPotential());
-        List<Long> categoryIds = wikiCard.getCategories().stream().map(WikiCardCategoryDTO::getId).toList();
-        List<Long> linkIds = wikiCard.getCardLinks().stream().map(WikiCardLinkDTO::getId).toList();
-        List<Integer> standBySkillIds = wikiCard.getStandbySkills().stream().map(WikiSkillDTO::getId).toList();
-        List<Integer> finishSkillIds = wikiCard.getFinishSkills().stream().map(WikiSkillDTO::getId).toList();
-        List<Long> specialIds = wikiCard.getSpecials().stream().map(WikiSpecialAttackDTO::getId).toList();
+        List<Long> categoryIds = safeList(wikiCard.getCategories()).stream().map(WikiCardCategoryDTO::getId).toList();
+        List<Long> linkIds = safeList(wikiCard.getCardLinks()).stream().map(WikiCardLinkDTO::getId).toList();
+        List<Integer> standBySkillIds = safeList(wikiCard.getStandbySkills()).stream().map(WikiSkillDTO::getId).toList();
+        List<Integer> finishSkillIds = safeList(wikiCard.getFinishSkills()).stream().map(WikiSkillDTO::getId).toList();
+        List<Long> specialIds = safeList(wikiCard.getSpecials()).stream().map(WikiSpecialAttackDTO::getId).toList();
         attribute.setCategoryId(categoryIds);
         attribute.setLinkId(linkIds);
         attribute.setStandBySkillIds(standBySkillIds);
@@ -151,6 +152,10 @@ public class WikiCardHelper {
             attribute.setNextCards(wikiCard.getTransformations());
         }
         return JSON.toJSONString(attribute);
+    }
+
+    private <T> List<T> safeList(List<T> values) {
+        return values == null ? Collections.emptyList() : values;
     }
 
 }
