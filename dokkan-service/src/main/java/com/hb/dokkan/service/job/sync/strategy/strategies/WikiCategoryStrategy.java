@@ -1,8 +1,7 @@
 package com.hb.dokkan.service.job.sync.strategy.strategies;
 
-import com.hb.dokkan.common.utils.TranslationUtils;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCategoryDTO;
-import com.hb.dokkan.service.facade.WikiFacade;
+import com.hb.dokkan.service.facade.DokkanDbFacade;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
@@ -23,7 +22,7 @@ import java.util.List;
 public class WikiCategoryStrategy implements WikiInfoStrategy {
 
     @Resource
-    private WikiFacade wikiFacade;
+    private DokkanDbFacade dokkanDbFacade;
 
     /**
      * 是否匹配
@@ -41,10 +40,9 @@ public class WikiCategoryStrategy implements WikiInfoStrategy {
      */
     @Override
     public void execute(WikiContext context) {
-        List<WikiCategoryDTO> categories = wikiFacade.getWikiCategory();
+        List<WikiCategoryDTO> categories = dokkanDbFacade.getCategories();
         if (!CollectionUtils.isEmpty(categories)) {
-            List<WikiCategoryDTO> data = TranslationUtils.toSimpleChinese(categories);
-            context.setCategoryData(data);
+            context.setCategoryData(categories);
         }
     }
 }

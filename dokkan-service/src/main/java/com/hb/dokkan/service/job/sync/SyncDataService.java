@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.google.common.collect.Maps;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
+import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoAttribute;
 import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoDTO;
 import com.hb.dokkan.common.domain.dto.data.cards.EzaCardInfoDTO;
 import com.hb.dokkan.common.domain.dto.data.cards.SkillDTO;
@@ -21,7 +22,6 @@ import com.hb.dokkan.common.domain.po.mysql.base.BasePO;
 import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import com.hb.dokkan.common.utils.TranslationUtils;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
 import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
@@ -33,7 +33,7 @@ import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
 import com.hb.dokkan.service.convert.DokkanSyncConvert;
 import com.hb.dokkan.service.helper.EsCardSyncHelper;
 import com.hb.dokkan.service.helper.WikiCardHelper;
-import com.hb.dokkan.service.facade.WikiFacade;
+import com.hb.dokkan.service.facade.DokkanDbFacade;
 import com.hb.dokkan.service.job.sync.factory.FixDataStrategyFactory;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
 import com.hb.dokkan.service.job.sync.strategy.FixDataStrategy;
@@ -105,7 +105,7 @@ public class SyncDataService{
     private FixDataStrategyFactory fixDataStrategyFactory;
 
     @Resource
-    private WikiFacade wikiFacade;
+    private DokkanDbFacade dokkanDbFacade;
 
     @Resource
     private WikiCardHelper wikiCardHelper;
@@ -120,8 +120,8 @@ public class SyncDataService{
         WikiContext context = new WikiContext();
         strategy.execute(context);
         WikiCardBO cardData = context.getCardData();
-        if (Objects.isNull(cardData)) {
-            log.error("初始化失败，获取卡片为空");
+        if (Objects.isNull(cardData) || CollectionUtils.isEmpty(cardData.getCardBaseData())) {
+            log.info("DokkanDB incremental sync completed, no new or updated cards");
             return;
         }
         SyncProgressContext.update(62, "整理卡片数据", "外部数据抓取完成，正在去重并转换");
@@ -145,12 +145,7 @@ public class SyncDataService{
         log.info("manual card sync started, requestedCardIds:{}", distinctCardIds);
         SyncProgressContext.update(12, "抓取指定卡片", "正在抓取 " + distinctCardIds.size() + " 个 cardId");
 
-        List<WikiCardDTO> wikiCards = wikiFacade.getWikiCardList(
-                        distinctCardIds.stream().map(String::valueOf).toList())
-                .stream()
-                .map(TranslationUtils::toSimpleChinese)
-                .filter(Objects::nonNull)
-                .toList();
+        List<WikiCardDTO> wikiCards = dokkanDbFacade.getCards(distinctCardIds);
         if (CollectionUtils.isEmpty(wikiCards)) {
             throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
         }
@@ -216,8 +211,16 @@ public class SyncDataService{
         transactionTemplate.execute(status -> {
             try {
                 List<WikiCategoryDTO> data = distinctList(categoryData);
-                categoryRepository.saveBatch(convert.convertToCategoryPO(data));
-                log.info("初始化完成，分类数据{}条", data.size());
+                List<DokkanCategoryPO> incoming = convert.convertToCategoryPO(data);
+                Set<Long> existingIds = categoryRepository.list().stream()
+                        .map(DokkanCategoryPO::getCategoryId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                List<DokkanCategoryPO> missing = incoming.stream()
+                        .filter(row -> row.getCategoryId() != null && !existingIds.contains(row.getCategoryId()))
+                        .toList();
+                if (!missing.isEmpty()) categoryRepository.saveBatch(missing);
+                log.info("DokkanDB category sync completed, fetched:{}, inserted:{}", data.size(), missing.size());
             } catch (Exception e) {
                 log.error("SyncDataService#initCategories error :{}", e.getMessage(), e);
                 status.setRollbackOnly();
@@ -241,8 +244,18 @@ public class SyncDataService{
         transactionTemplate.execute(status -> {
             try {
                 List<WikiLinkDTO> data = distinctList(linkData);
-                linkRepository.saveBatch(convert.convertToLinkPO(data));
-                log.info("初始化完成，链接数据{}条", data.size());
+                List<DokkanLinkPO> incoming = convert.convertToLinkPO(data);
+                Set<Long> existingIds = linkRepository.list().stream()
+                        .map(DokkanLinkPO::getLinkId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+                List<DokkanLinkPO> missing = incoming.stream()
+                        .filter(row -> row.getLinkId() != null && !existingIds.contains(row.getLinkId()))
+                        .filter(row -> StringUtils.isNoneBlank(row.getLinkName(), row.getLevel1Description(),
+                                row.getLevel10Description()))
+                        .toList();
+                if (!missing.isEmpty()) linkRepository.saveBatch(missing);
+                log.info("DokkanDB link sync completed, fetched:{}, inserted:{}", data.size(), missing.size());
             } catch (Exception e) {
                 log.error("SyncDataService#initLinks error :{}", e.getMessage(), e);
                 status.setRollbackOnly();
@@ -362,10 +375,19 @@ public class SyncDataService{
         }
         List<SpecialAttackDTO> distinctList = distinctByKey(specialAttacks, SpecialAttackDTO::getSpecialId);
         List<SpecialPO> specialPOS = convert.wikiSpecial2POList(distinctList);
-        Map<Long, String> existingIds = specialRepository.batchQueryBySpecialIds(
+        Map<Long, SpecialPO> existingSpecials = specialRepository.batchQueryBySpecialIds(
                         specialPOS.stream().map(SpecialPO::getSpecialId).toList())
-                .stream().collect(Collectors.toMap(SpecialPO::getSpecialId, SpecialPO::getId, (oldValue, newValue) -> oldValue));
-        specialPOS.forEach(special -> special.setId(existingIds.get(special.getSpecialId())));
+                .stream().collect(Collectors.toMap(SpecialPO::getSpecialId, Function.identity(),
+                        (oldValue, newValue) -> oldValue));
+        specialPOS.forEach(special -> {
+            SpecialPO existing = existingSpecials.get(special.getSpecialId());
+            if (existing == null) return;
+            special.setId(existing.getId());
+            special.setDescription(existing.getDescription());
+            special.setSpecialCategoryName(existing.getSpecialCategoryName());
+            special.setSpecialBonus1(existing.getSpecialBonus1());
+            special.setSpecialBonus2(existing.getSpecialBonus2());
+        });
         saveOrUpdateByKnownId(specialRepository, specialPOS, 1000);
     }
 
@@ -375,10 +397,19 @@ public class SyncDataService{
         }
         List<EzaCardInfoDTO> distinctList = distinctByKey(ezaCardInfos, this::ezaCardKey);
         List<EzaCardPO> ezaCardPOS = convert.wikiEza2POList(distinctList);
-        Map<String, String> existingIds = ezaCardRepository.batchQueryByCardIds(
+        Map<String, EzaCardPO> existingCards = ezaCardRepository.batchQueryByCardIds(
                         ezaCardPOS.stream().map(EzaCardPO::getCardId).distinct().toList())
-                .stream().collect(Collectors.toMap(this::ezaCardKey, EzaCardPO::getId, (oldValue, newValue) -> oldValue));
-        ezaCardPOS.forEach(ezaCard -> ezaCard.setId(existingIds.get(ezaCardKey(ezaCard))));
+                .stream().collect(Collectors.toMap(this::ezaCardKey, Function.identity(), (oldValue, newValue) -> oldValue));
+        ezaCardPOS.forEach(ezaCard -> {
+            EzaCardPO existing = existingCards.get(ezaCardKey(ezaCard));
+            if (existing == null) return;
+            ezaCard.setId(existing.getId());
+            ezaCard.setCardName(existing.getCardName());
+            ezaCard.setTitle(existing.getTitle());
+            ezaCard.setLeaderSkill(existing.getLeaderSkill());
+            ezaCard.setPassiveSkillDesc(existing.getPassiveSkillDesc());
+            if (ezaCard.getCost() == null) ezaCard.setCost(existing.getCost());
+        });
         saveOrUpdateByKnownId(ezaCardRepository, ezaCardPOS, 500);
     }
 
@@ -388,10 +419,19 @@ public class SyncDataService{
         if (CollectionUtils.isEmpty(skillPOS)) {
             return;
         }
-        Map<String, String> existingIds = skillRepository.batchQueryBySkillIds(
+        Map<String, SkillPO> existingSkills = skillRepository.batchQueryBySkillIds(
                         skillPOS.stream().map(SkillPO::getSkillId).toList())
-                .stream().collect(Collectors.toMap(SkillPO::getSkillId, SkillPO::getId, (oldValue, newValue) -> oldValue));
-        skillPOS.forEach(skill -> skill.setId(existingIds.get(skill.getSkillId())));
+                .stream().collect(Collectors.toMap(SkillPO::getSkillId, Function.identity(),
+                        (oldValue, newValue) -> oldValue));
+        skillPOS.forEach(skill -> {
+            SkillPO existing = existingSkills.get(skill.getSkillId());
+            if (existing == null) return;
+            skill.setId(existing.getId());
+            skill.setName(existing.getName());
+            skill.setConditionDescription(existing.getConditionDescription());
+            skill.setEffectDescription(existing.getEffectDescription());
+            skill.setSpecialCategoryName(existing.getSpecialCategoryName());
+        });
         saveOrUpdateByKnownId(skillRepository, skillPOS, 500);
     }
 
@@ -400,11 +440,37 @@ public class SyncDataService{
         List<CardBaseInfoDTO> distinctedList = distinctByKey(cards, CardBaseInfoDTO::getCardId);
         List<CardPO> cardModel = convert.wikiCard2POList(distinctedList);
         checkParam(cardModel);
-        Map<Long, String> existingIds = cardRepository.batchQueryByCardIds(
+        Map<Long, CardPO> existingCards = cardRepository.batchQueryByCardIds(
                         cardModel.stream().map(CardPO::getCardId).toList())
-                .stream().collect(Collectors.toMap(CardPO::getCardId, CardPO::getId, (oldValue, newValue) -> oldValue));
-        cardModel.forEach(card -> card.setId(existingIds.get(card.getCardId())));
+                .stream().collect(Collectors.toMap(CardPO::getCardId, Function.identity(), (oldValue, newValue) -> oldValue));
+        cardModel.forEach(card -> {
+            CardPO existing = existingCards.get(card.getCardId());
+            card.setId(existing == null ? null : existing.getId());
+            preserveExistingLocalizedFields(card, existing);
+        });
         saveOrUpdateByKnownId(cardRepository, cardModel, 500);
+    }
+
+    /** Existing Chinese base text is higher quality than machine translation during EZA-only updates. */
+    private void preserveExistingLocalizedFields(CardPO incoming, CardPO existing) {
+        if (existing == null) return;
+        incoming.setCardName(existing.getCardName());
+        incoming.setTitle(existing.getTitle());
+        if (incoming.getCost() == null) incoming.setCost(existing.getCost());
+        try {
+            CardBaseInfoAttribute oldAttributes = JSON.parseObject(existing.getAttributes(), CardBaseInfoAttribute.class);
+            CardBaseInfoAttribute newAttributes = JSON.parseObject(incoming.getAttributes(), CardBaseInfoAttribute.class);
+            if (oldAttributes == null || newAttributes == null) return;
+            newAttributes.setLeaderSkill(oldAttributes.getLeaderSkill());
+            newAttributes.setPassiveSkillName(oldAttributes.getPassiveSkillName());
+            newAttributes.setPassiveSkillDesc(oldAttributes.getPassiveSkillDesc());
+            newAttributes.setActiveSkillName(oldAttributes.getActiveSkillName());
+            newAttributes.setActiveSkillEffect(oldAttributes.getActiveSkillEffect());
+            newAttributes.setActiveSkillCondition(oldAttributes.getActiveSkillCondition());
+            incoming.setAttributes(JSON.toJSONString(newAttributes));
+        } catch (Exception e) {
+            log.warn("preserve localized card fields failed, cardId:{}", incoming.getCardId(), e);
+        }
     }
 
     private <T extends BasePO> void saveOrUpdateByKnownId(IService<T> repository, List<T> entities, int batchSize) {

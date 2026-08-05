@@ -1,39 +1,35 @@
 package com.hb.dokkan.service.job.sync.strategy.strategies;
 
-import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Lists;
 import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
-import com.hb.dokkan.common.domain.dto.data.wiki.AwakeningInfoDTO;
-import com.hb.dokkan.common.domain.dto.data.wiki.CardInfoSyncCardDTO;
-import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardBaseInfoDTO;
+import com.hb.dokkan.common.domain.dto.data.dokkandb.DokkanDbCardDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardDTO;
-import com.hb.dokkan.common.enums.CardAwakeningTypeEnum;
-import com.hb.dokkan.common.enums.CardRarityEnum;
+import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import com.hb.dokkan.common.utils.JsonUtils;
-import com.hb.dokkan.common.utils.TranslationUtils;
 import com.hb.dokkan.config.data.WikiCardFilter;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
-import com.hb.dokkan.service.facade.WikiFacade;
+import com.hb.dokkan.service.facade.DokkanDbFacade;
 import com.hb.dokkan.service.helper.WikiCardHelper;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
 import com.hb.dokkan.service.job.sync.SyncProgressContext;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
+import com.hb.dokkan.service.translation.DokkanTranslationService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Date;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Semaphore;
@@ -48,7 +44,10 @@ import java.util.concurrent.Semaphore;
 public class WikiCardStrategy implements WikiInfoStrategy {
 
     @Resource
-    private WikiFacade wikiFacade;
+    private DokkanDbFacade dokkanDbFacade;
+
+    @Resource
+    private DokkanCardRepository cardRepository;
 
     @Resource
     private HttpPoolProperties httpPoolProperties;
@@ -63,6 +62,9 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
     @Resource
     private WikiCardFilter cardFilter;
+
+    @Resource
+    private DokkanTranslationService translationService;
 
 
     /**
@@ -84,29 +86,38 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
     private List<WikiCardDTO> getWikiCards() {
         try {
-            String html = wikiFacade.getWikiHtml();
-            if (StringUtils.isBlank(html)) {
-                throw new DokkanBizException("html 获取失败");
+            List<DokkanDbCardDTO> catalog = dokkanDbFacade.getRecentCatalog(500);
+            if (CollectionUtils.isEmpty(catalog)) {
+                throw new DokkanBizException("DokkanDB catalog is empty");
             }
-            Document doc = Jsoup.parse(html, "utf-8");
-            Element cardsElement = doc.selectFirst("cards");
-            if (Objects.isNull(cardsElement)) {
-                return Lists.newArrayList();
-            }
-            String cardsJson = cardsElement.attr("v-bind:cardsjson");
-            List<CardInfoSyncCardDTO> syncCardsJobs = JsonUtils.json2List(cardsJson, CardInfoSyncCardDTO.class);
-            List<Long> cardIds = syncCardsJobs.stream()
-                    .filter(card -> card.getId() < 5000021 && card.getRarity() > 3)
-                    .map(CardInfoSyncCardDTO::getId)
+            List<DokkanDbCardDTO> filteredCatalog = catalog.stream()
+                    .filter(card -> card.getId() != null && card.getId() < 5000021)
+                    .filter(card -> card.getRarity() != null && card.getRarity() > 3)
+                    .filter(card -> !cardFilter.getWikiCardBlackList().contains(card.getId()))
+                    .toList();
+            Map<Long, CardPO> existingCards = cardRepository.batchQueryByCardIds(
+                            filteredCatalog.stream().map(DokkanDbCardDTO::getId).toList())
+                    .stream().collect(Collectors.toMap(CardPO::getCardId, Function.identity(), (left, right) -> left));
+            filteredCatalog.forEach(source -> {
+                CardPO existing = existingCards.get(source.getId());
+                if (existing == null) return;
+                translationService.registerTrustedTerm(source.getName(), existing.getCardName());
+                translationService.registerTrustedTerm(source.getTitle(), existing.getTitle());
+            });
+            List<Long> cardIds = filteredCatalog.stream()
+                    .filter(card -> isNewOrUpdated(card, existingCards.get(card.getId())))
+                    .map(DokkanDbCardDTO::getId)
+                    .distinct()
                     .toList();
             SyncProgressContext.update(12, "抓取外部数据", "发现 " + cardIds.size() + " 个候选 cardId");
-            log.info("开始获取卡片信息， 总数量:{}", cardIds.size());
+            log.info("DokkanDB incremental catalog checked, catalogSize:{}, syncCandidates:{}",
+                    filteredCatalog.size(), cardIds.size());
+            if (cardIds.isEmpty()) return Lists.newArrayList();
 
             HttpPoolProperties.Concurrency concurrencyConfig = httpPoolProperties.getConcurrency();
-            int batchSize = concurrencyConfig.getBatchSize();
+            int batchSize = Math.min(concurrencyConfig.getBatchSize(), 50);
             List<WikiCardDTO> allResult = Lists.newArrayList();
             List<Long> errorIds = new CopyOnWriteArrayList<>();
-            List<Long> specialCardIds = new CopyOnWriteArrayList<>();
             for (int i = 0; i < cardIds.size(); i+= batchSize) {
                 int endIndex = Math.min(i + batchSize, cardIds.size());
 
@@ -122,13 +133,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                                     try{
                                         semaphore.acquire();
                                         acquired = true;
-                                        WikiCardDTO wikiCardDTO = wikiFacade.getWikiCard(String.valueOf(cardId));
-                                        if (filterCard(wikiCardDTO, specialCardIds)) {
-                                            WikiCardDTO insertCard = TranslationUtils.toSimpleChinese(wikiCardDTO);
-                                            // 日志可以保留，但要注意日志本身也可能成为瓶颈
-                                            return insertCard;
-                                        }
-                                        return null;
+                                        return dokkanDbFacade.getCard(cardId);
                                     }catch (Exception e) {
                                         log.error("获取卡片异常 cardId:{}", cardId, e);
                                         errorIds.add(cardId);
@@ -154,14 +159,8 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                 log.info("第 {} 批处理完成 获取到{}个有效卡片", (i / batchSize + 1), batchCardIds.size());
 
             }
-            CompletableFuture.supplyAsync(()  -> {
-                JsonUtils.writeJson2File(JSON.toJSONString(errorIds), "E:/IDEA Project/dokkan-web/dokkan-starter/src/main/resources/error/error_card.json");
-                JsonUtils.writeJson2File(JSON.toJSONString(specialCardIds), "E:/IDEA Project/dokkan-web/dokkan-starter/src/main/resources/error/special_card.json");
-                return null;
-            });
-            log.error("获取卡片失败， 失败数量:{}, 失败卡片:{}", errorIds.size(), errorIds);
-            log.info("特殊处理卡， 数量:{}， 卡片:{}", specialCardIds.size(), specialCardIds);
-            log.info("获取卡片成功， 总共获取{}个卡片", allResult.size());
+            if (!errorIds.isEmpty()) log.error("DokkanDB card fetch failed, count:{}, cardIds:{}", errorIds.size(), errorIds);
+            log.info("DokkanDB incremental fetch completed, cards:{}", allResult.size());
             return allResult;
 
 
@@ -171,60 +170,24 @@ public class WikiCardStrategy implements WikiInfoStrategy {
         }
     }
 
-    public boolean filterCard(WikiCardDTO card, List<Long> specialCardIds) {
-        if (Objects.isNull(card) || Objects.isNull(card.getCard()) || CollectionUtils.isEmpty(card.getAwakeningRoutes())) {
-            return false;
-        }
-
-        WikiCardBaseInfoDTO cardDetail = card.getCard();
-        if (StringUtils.isAnyBlank(cardDetail.getLeaderSkill(),cardDetail.getPassiveSkillDesc()) || CollectionUtils.isEmpty(card.getCardLinks()) ||
-        CollectionUtils.isEmpty(card.getCategories())) {
-            return false;
-        }
-        if (cardFilter.getWikiCardWhiteList().contains(cardDetail.getId())) {
-            return true;
-        }
-        if (cardFilter.getWikiCardBlackList().contains(cardDetail.getId())) {
-            return false;
-        }
-        boolean rarityFlag = Objects.nonNull(cardDetail.getRarity()) && cardDetail.getRarity() > CardRarityEnum.SSR.getRarity();
-
-        boolean awakenFlag = filterAwakenCard(card.getAwakeningRoutes(), cardDetail, specialCardIds);
-        return awakenFlag && rarityFlag;
+    private boolean isNewOrUpdated(DokkanDbCardDTO source, CardPO existing) {
+        if (existing == null) return true;
+        Date sourceUpdate = parseDokkanDbDate(source.getOpenAtUpdate());
+        return sourceUpdate != null && (existing.getUpdateTime() == null || sourceUpdate.after(existing.getUpdateTime()));
     }
 
-    /**
-     * 过滤出是dk觉醒后的卡
-     */
-    private boolean filterAwakenCard(List<AwakeningInfoDTO> awakeningRoutes, WikiCardBaseInfoDTO card, List<Long> specialCardIds) {
-        // 变身后的卡
-        if (awakeningRoutes.size() == 1 ) {
-            if (BooleanUtils.isTrue(card.getFreeCardFlag()) && CardRarityEnum.LR.getRarity() != card.getRarity()) {
-                log.warn("特殊卡，记下来，后续处理 cardId:{}", card.getId());
-                specialCardIds.add(card.getId());
-                return false;
+    private Date parseDokkanDbDate(String value) {
+        if (StringUtils.isBlank(value)) return null;
+        try {
+            return Date.from(java.time.OffsetDateTime.parse(value).toInstant());
+        } catch (Exception ignored) {
+            try {
+                return Date.from(java.time.LocalDateTime.parse(value)
+                        .atZone(java.time.ZoneId.of("Asia/Tokyo")).toInstant());
+            } catch (Exception ignoredAgain) {
+                return null;
             }
-            return true;
         }
-        List<AwakeningInfoDTO> sortedList = awakeningRoutes.stream()
-                .filter(awakeningInfoDTO -> CardAwakeningTypeEnum.DOKKAN_AWAKENING.getType().equals(
-                        awakeningInfoDTO.getAwakenDetail().getType()))
-                .sorted((o1, o2) -> {
-                            AwakeningInfoDTO.AwakenDetailDTO awakenDetail1 = o1.getAwakenDetail();
-                            AwakeningInfoDTO.AwakenDetailDTO awakenDetail2 = o2.getAwakenDetail();
-                            int rarityCompare = Integer.compare(awakenDetail1.getRarity(), awakenDetail2.getRarity());
-                            if (rarityCompare != 0) {
-                                return rarityCompare;
-                            }
-                            return awakenDetail2.getOpenAt().compareTo(awakenDetail1.getOpenAt());
-                        }
-                )
-                .toList();
-        if (CollectionUtils.isEmpty(sortedList)) {
-            return false;
-        }
-        AwakeningInfoDTO lastCard = sortedList.getLast();
-        return lastCard.getAwakedCardId().equals(card.getId());
     }
 
     @PostConstruct

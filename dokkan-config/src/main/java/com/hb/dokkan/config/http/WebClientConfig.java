@@ -85,6 +85,60 @@ public class WebClientConfig {
                 .build();
     }
 
+    @Bean("dokkanDbWebClient")
+    public WebClient dokkanDbWebClient() {
+        HttpPoolProperties.WebClient config = httpPoolProperties.getWebClient();
+        ConnectionProvider connectionProvider = ConnectionProvider.builder("dokkan-db")
+                .maxConnections(config.getMaxConnections())
+                .maxIdleTime(Duration.ofSeconds(config.getMaxIdleTimeSeconds()))
+                .maxLifeTime(Duration.ofSeconds(config.getMaxLifeTimeSeconds()))
+                .pendingAcquireTimeout(Duration.ofSeconds(config.getPendingAcquireTimeSeconds()))
+                .evictInBackground(Duration.ofSeconds(config.getEvictInBackgroundTimeSeconds()))
+                .build();
+        HttpClient httpClient = HttpClient.create(connectionProvider)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.getConnectTimeoutMills())
+                .doOnConnected(connection -> connection
+                        .addHandlerLast(new ReadTimeoutHandler(config.getReadTimeoutSeconds()))
+                        .addHandlerLast(new WriteTimeoutHandler(config.getWriteTimeoutSeconds())));
+        return WebClient.builder()
+                .baseUrl("https://api.dokkandb.com/jp")
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0")
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
+    }
+
+    @Bean("googleTranslationWebClient")
+    public WebClient googleTranslationWebClient() {
+        return WebClient.builder()
+                .baseUrl("https://translate.googleapis.com")
+                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0")
+                .build();
+    }
+
+    @Bean("dokkanDbGlobalWebClient")
+    public WebClient dokkanDbGlobalWebClient() {
+        HttpPoolProperties.WebClient config = httpPoolProperties.getWebClient();
+        ConnectionProvider connectionProvider = ConnectionProvider.builder("dokkan-db-global")
+                .maxConnections(config.getMaxConnections())
+                .maxIdleTime(Duration.ofSeconds(config.getMaxIdleTimeSeconds()))
+                .maxLifeTime(Duration.ofSeconds(config.getMaxLifeTimeSeconds()))
+                .pendingAcquireTimeout(Duration.ofSeconds(config.getPendingAcquireTimeSeconds()))
+                .evictInBackground(Duration.ofSeconds(config.getEvictInBackgroundTimeSeconds()))
+                .build();
+        HttpClient httpClient = HttpClient.create(connectionProvider)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.getConnectTimeoutMills())
+                .doOnConnected(connection -> connection
+                        .addHandlerLast(new ReadTimeoutHandler(config.getReadTimeoutSeconds()))
+                        .addHandlerLast(new WriteTimeoutHandler(config.getWriteTimeoutSeconds())));
+        return WebClient.builder()
+                .baseUrl("https://api.dokkandb.com")
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0")
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
+    }
+
     @Bean("dokkanInfoRestClient")
     public RestClient infoRestClient() {
         return RestClient.builder()
