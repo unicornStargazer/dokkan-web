@@ -33,16 +33,19 @@ public class DokkanCardDelegate {
     private DokkanCardService cardService;
 
     /**
-     * 查询卡片列表
+     * 查询卡片分页列表，负责参数校验、请求转换和响应封装。
      *
+     * @param request 卡片查询请求
+     * @return 卡片分页列表响应
      */
     public DokkanResponse<PageResponse<CardListResponse>> cardList(CardQueryRequest request) {
         if (Objects.isNull(request)) {
             throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
         }
+        // 初始化分页参数，兜底不传分页参数导致查询数据过多。
         CardQueryOptionDTO queryOption = dokkanCardConvert.queryRequestToDto(request);
-        //  初始化分页参数 兜底不传分页参数导致查询数据过多
         queryOption.initPageable();
+        // 查询业务数据后统一转换为 API 响应模型。
         PageResponse<CardListVO> response = cardService.cardList(queryOption);
         List<CardListResponse> list = dokkanCardConvert.listVoToResponseList(response.getData());
         PageResponse<CardListResponse> pageResponse = PageResponse.<CardListResponse>builder()
@@ -57,7 +60,10 @@ public class DokkanCardDelegate {
     }
 
     /**
-     * 卡片详情
+     * 查询卡片详情，负责参数校验、请求转换和响应封装。
+     *
+     * @param request 卡片查询请求
+     * @return 卡片详情响应
      */
     public DokkanResponse<CardDetailResponse> cardDetail(CardQueryRequest request) {
         if (Objects.isNull(request) || Objects.isNull(request.getCardId())) {

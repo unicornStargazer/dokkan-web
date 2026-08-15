@@ -1,31 +1,27 @@
 package com.hb.dokkan.service.translation;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.houbb.opencc4j.util.ZhConverterUtil;
+import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
+import com.hb.dokkan.common.utils.JsonUtils;
+import com.hb.dokkan.common.utils.TranslationUtils;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
 import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
+import com.hb.dokkan.service.translation.client.DokkanDbTerminologyClient;
+import com.hb.dokkan.service.translation.client.GoogleTranslationClient;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.reactive.function.BodyInserters;
-import org.springframework.web.reactive.function.client.WebClient;
 
+import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -36,31 +32,39 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
-import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
-/** Dokkan text translation with terminology protection and a persistent cache. */
+/**
+ * @Description Dokkan文本翻译服务
+ * @Author stargazer
+ * @Date 2026/8/15 19:00
+ **/
 @Slf4j
 @Service
 public class DokkanTranslationService {
-    private static final int CACHE_FORMAT_VERSION = 3;
-    private static final int MAX_BATCH_CHARS = 4500;
-    private static final Pattern JAPANESE_KANA = Pattern.compile("[\\p{IsHiragana}\\p{IsKatakana}]");
-    private static final Map<String, String> TERM_GLOSSARY = buildGlossary();
 
+    /** 日文假名匹配模式，用于区分 Google 翻译源语言。 */
+    private static final Pattern JAPANESE_KANA = Pattern.compile(TranslationConstants.JAPANESE_KANA_REGEX);
+
+    /** 翻译缓存，key 为原文，value 为简体中文翻译。 */
     private final Map<String, String> cache = new ConcurrentHashMap<>();
+
+    /** 自定义术语表，来源于配置文件。 */
     private final Map<String, String> customGlossary = new ConcurrentHashMap<>();
+
+    /** 运行期领域术语表，来源于数据库和 DokkanDB 外部接口。 */
     private final Map<String, String> domainGlossary = new ConcurrentHashMap<>();
+
+    /** 缓存写入锁，避免并发持久化互相覆盖。 */
     private final Object cacheWriteLock = new Object();
-    private final Semaphore translationPermits = new Semaphore(4);
+
+    /** 翻译并发许可，限制远程 Google 翻译调用并发。 */
+    private final Semaphore translationPermits = new Semaphore(TranslationConstants.GOOGLE_TRANSLATION_PERMITS);
+
+    /** 领域术语是否已经预热。 */
     private volatile boolean domainGlossaryLoaded;
-
-    @Resource
-    private ObjectMapper objectMapper;
-
-    @Resource(name = "googleTranslationWebClient")
-    private WebClient translationClient;
 
     @Resource
     private ResourceLoader resourceLoader;
@@ -72,12 +76,10 @@ public class DokkanTranslationService {
     private DokkanLinkRepository linkRepository;
 
     @Resource
-    @Qualifier("dokkanDbWebClient")
-    private WebClient dokkanDbJpClient;
+    private GoogleTranslationClient googleTranslationClient;
 
     @Resource
-    @Qualifier("dokkanDbGlobalWebClient")
-    private WebClient dokkanDbGlobalClient;
+    private DokkanDbTerminologyClient dokkanDbTerminologyClient;
 
     @Value("${dokkan.translation.enabled:true}")
     private boolean enabled;
@@ -88,131 +90,199 @@ public class DokkanTranslationService {
     @Value("${dokkan.translation.glossary-file:classpath:dokkan-translation-glossary.json}")
     private String glossaryFile;
 
+    /**
+     * 初始化翻译服务，加载自定义词表和本地缓存。
+     */
     @PostConstruct
     public void initialize() {
         loadCustomGlossary();
         loadCache();
     }
 
+    /**
+     * 注册可信术语，可信术语会优先于远程翻译和缓存。
+     *
+     * @param source  原文术语
+     * @param chinese 简体中文术语
+     */
+    public void registerTrustedTerm(String source, String chinese) {
+        if (StringUtils.isAnyBlank(source, chinese) || source.equals(chinese)) {
+            return;
+        }
+        domainGlossary.put(source, TranslationUtils.toSimpleChineseText(chinese));
+        cache.keySet().removeIf(cachedSource -> cachedSource.contains(source));
+    }
+
+    /**
+     * 翻译单条文本，失败时沿用批量翻译的源文本兜底策略。
+     *
+     * @param source 待翻译文本
+     * @return 翻译后的文本
+     */
+    public String translate(String source) {
+        return translateAll(Collections.singletonList(source)).getFirst();
+    }
+
+    /**
+     * 批量翻译文本，优先使用可信术语和缓存，缺失部分再调用远程翻译。
+     *
+     * @param sourceTexts 待翻译文本集合
+     * @return 与入参顺序一致的翻译结果列表
+     */
+    public List<String> translateAll(Collection<String> sourceTexts) {
+        if (Objects.isNull(sourceTexts)) {
+            return Collections.emptyList();
+        }
+        List<String> sources = new ArrayList<>(sourceTexts);
+        if (!enabled || sources.isEmpty()) {
+            return sources;
+        }
+
+        // 先预热领域术语，保障分类、链接等固定名称翻译稳定。
+        ensureDomainGlossary();
+        // 找出既不是可信术语、也未命中缓存的文本，避免重复请求远程翻译。
+        List<String> missing = sources.stream()
+                .filter(StringUtils::isNotBlank)
+                .filter(source -> Objects.isNull(trustedTranslation(source)))
+                .filter(source -> !cache.containsKey(source))
+                .distinct()
+                .toList();
+        if (!missing.isEmpty()) {
+            // 缺失内容按批次翻译，完成后持久化缓存。
+            translateMissing(missing);
+            persistCache();
+        }
+        return sources.stream()
+                .map(this::translatedValue)
+                .toList();
+    }
+
+    /**
+     * 加载自定义术语表，失败时降级为空词表并继续翻译主链路。
+     */
     private void loadCustomGlossary() {
-        try (var input = resourceLoader.getResource(glossaryFile).getInputStream()) {
-            Map<String, String> values = objectMapper.readValue(input, new TypeReference<Map<String, String>>() {});
+        try (InputStream input = resourceLoader.getResource(glossaryFile).getInputStream()) {
+            Map<String, String> values = JsonUtils.inputStream2Map(input, String.class, String.class);
             values.forEach(this::putCustomTerm);
             log.info("Dokkan translation glossary loaded, location={}, size={}", glossaryFile, customGlossary.size());
-        } catch (java.io.FileNotFoundException e) {
+        } catch (FileNotFoundException e) {
             log.info("Dokkan translation glossary does not exist, location={}", glossaryFile);
         } catch (Exception e) {
             log.warn("Failed to load Dokkan translation glossary, location={}", glossaryFile, e);
         }
     }
 
+    /**
+     * 加载本地翻译缓存，缓存版本或词表哈希不匹配时忽略旧缓存。
+     */
     private void loadCache() {
         Path path = Path.of(cacheFile).toAbsolutePath().normalize();
-        if (!Files.isRegularFile(path)) return;
+        if (!Files.isRegularFile(path)) {
+            return;
+        }
         try {
-            JsonNode root = objectMapper.readTree(path.toFile());
-            if (root.path("version").asInt() != CACHE_FORMAT_VERSION
-                    || root.path("glossaryHash").asInt() != glossaryHash()
-                    || !root.path("translations").isObject()) {
+            Map<String, Object> root = JsonUtils.file2StringObjectMap(path);
+            if (Objects.isNull(root)
+                    || !Objects.equals(root.get(TranslationConstants.CACHE_FIELD_VERSION),
+                    TranslationConstants.CACHE_FORMAT_VERSION)
+                    || !Objects.equals(root.get(TranslationConstants.CACHE_FIELD_GLOSSARY_HASH), glossaryHash())
+                    || !(root.get(TranslationConstants.CACHE_FIELD_TRANSLATIONS) instanceof Map<?, ?>)) {
                 log.info("Ignoring legacy Dokkan translation cache, path={}", path);
                 return;
             }
-            cache.putAll(objectMapper.convertValue(root.path("translations"), new TypeReference<Map<String, String>>() {}));
+            Map<String, String> translations = JsonUtils.convert2StringMap(
+                    root.get(TranslationConstants.CACHE_FIELD_TRANSLATIONS));
+            cache.putAll(translations);
             log.info("Dokkan translation cache loaded, path={}, size={}", path, cache.size());
         } catch (Exception e) {
             log.warn("Failed to load Dokkan translation cache, path={}", path, e);
         }
     }
 
-    /** Adds trusted source/Chinese pairs learned from existing localized records. */
-    public void registerTrustedTerm(String source, String chinese) {
-        if (StringUtils.isAnyBlank(source, chinese) || source.equals(chinese)) return;
-        domainGlossary.put(source, ZhConverterUtil.toSimple(chinese));
-        cache.keySet().removeIf(cachedSource -> cachedSource.contains(source));
-    }
-
-    public String translate(String source) {
-        return translateAll(Collections.singletonList(source)).getFirst();
-    }
-
-    public List<String> translateAll(Collection<String> sourceTexts) {
-        if (sourceTexts == null) return Collections.emptyList();
-        List<String> sources = new ArrayList<>(sourceTexts);
-        if (!enabled || sources.isEmpty()) return sources;
-
-        ensureDomainGlossary();
-
-        List<String> missing = sources.stream()
-                .filter(StringUtils::isNotBlank)
-                .filter(source -> trustedTranslation(source) == null)
-                .filter(source -> !cache.containsKey(source))
-                .distinct()
-                .toList();
-        if (!missing.isEmpty()) {
-            translateMissing(missing);
-            persistCache();
+    /**
+     * 获取单条文本最终翻译值，优先可信术语，其次缓存，最后保留源文本。
+     *
+     * @param source 原文文本
+     * @return 归一化后的翻译值
+     */
+    private String translatedValue(String source) {
+        if (StringUtils.isBlank(source)) {
+            return source;
         }
-        return sources.stream()
-                .map(source -> {
-                    if (StringUtils.isBlank(source)) return source;
-                    String trusted = trustedTranslation(source);
-                    return normalizeTerms(trusted == null ? cache.getOrDefault(source, source) : trusted);
-                })
-                .toList();
+        String trusted = trustedTranslation(source);
+        return normalizeTerms(Objects.isNull(trusted) ? cache.getOrDefault(source, source) : trusted);
     }
 
+    /**
+     * 预热数据库领域术语，失败时降级为仅使用静态词表和缓存。
+     */
     private synchronized void ensureDomainGlossary() {
-        if (domainGlossaryLoaded) return;
+        if (domainGlossaryLoaded) {
+            return;
+        }
         try {
+            // 先读取本地已翻译分类和链接名称，作为 DokkanDB 原文名称的目标翻译。
             Map<Long, String> categoryNames = categoryRepository.list().stream()
-                    .filter(row -> row.getCategoryId() != null && StringUtils.isNotBlank(row.getCategoryName()))
+                    .filter(row -> Objects.nonNull(row.getCategoryId()) && StringUtils.isNotBlank(row.getCategoryName()))
                     .collect(Collectors.toMap(DokkanCategoryPO::getCategoryId, DokkanCategoryPO::getCategoryName,
                             (left, right) -> left));
             Map<Long, String> linkNames = linkRepository.list().stream()
-                    .filter(row -> row.getLinkId() != null && StringUtils.isNotBlank(row.getLinkName()))
+                    .filter(row -> Objects.nonNull(row.getLinkId()) && StringUtils.isNotBlank(row.getLinkName()))
                     .collect(Collectors.toMap(DokkanLinkPO::getLinkId, DokkanLinkPO::getLinkName,
                             (left, right) -> left));
-            registerNamedEntries(fetchNamedEntries(dokkanDbJpClient, "/api/categories"), categoryNames);
-            registerNamedEntries(fetchNamedEntries(dokkanDbGlobalClient, "/api/categories"), categoryNames);
-            registerNamedEntries(fetchNamedEntries(dokkanDbJpClient, "/api/links"), linkNames);
-            registerNamedEntries(fetchNamedEntries(dokkanDbGlobalClient, "/api/links"), linkNames);
+            // 再调用 DokkanDB Client 获取原文术语，Client 内部负责异常和空列表兜底。
+            registerNamedEntries(dokkanDbTerminologyClient.listJpCategories(), categoryNames);
+            registerNamedEntries(dokkanDbTerminologyClient.listGlobalCategories(), categoryNames);
+            registerNamedEntries(dokkanDbTerminologyClient.listJpLinks(), linkNames);
+            registerNamedEntries(dokkanDbTerminologyClient.listGlobalLinks(), linkNames);
             domainGlossaryLoaded = true;
             log.info("Dokkan database translation memory loaded, terms={}", domainGlossary.size());
         } catch (Exception e) {
-            // Translation must remain available even if the optional terminology warm-up fails.
+            // 术语预热失败不影响翻译主链路，失败时继续使用静态词表与缓存。
             domainGlossaryLoaded = true;
             log.warn("Failed to build Dokkan database translation memory", e);
         }
     }
 
-    private List<NamedEntry> fetchNamedEntries(WebClient sourceClient, String path) {
-        List<NamedEntry> rows = sourceClient.get()
-                .uri(uri -> uri.path(path).build())
-                .retrieve()
-                .bodyToFlux(NamedEntry.class)
-                .collectList()
-                .block(Duration.ofSeconds(30));
-        return rows == null ? Collections.emptyList() : rows;
-    }
-
-    private void registerNamedEntries(List<NamedEntry> entries, Map<Long, String> localizedNames) {
-        for (NamedEntry entry : entries) {
-            if (entry != null) registerTrustedTerm(entry.name(), localizedNames.get(entry.id()));
+    /**
+     * 将 DokkanDB 原文条目与本地中文名称绑定为可信术语。
+     *
+     * @param entries        DokkanDB 原文条目
+     * @param localizedNames 本地中文名称 Map
+     */
+    private void registerNamedEntries(List<DokkanDbTerminologyClient.NamedEntry> entries, Map<Long, String> localizedNames) {
+        for (DokkanDbTerminologyClient.NamedEntry entry : entries) {
+            if (Objects.nonNull(entry)) {
+                registerTrustedTerm(entry.name(), localizedNames.get(entry.id()));
+            }
         }
     }
 
+    /**
+     * 查询可信术语翻译，优先自定义词表，其次领域词表，最后静态词表。
+     *
+     * @param source 原文术语
+     * @return 可信翻译，不存在时返回 null
+     */
     private String trustedTranslation(String source) {
         String value = customGlossary.get(source);
-        if (value != null) return value;
+        if (Objects.nonNull(value)) {
+            return value;
+        }
         value = domainGlossary.get(source);
-        return value == null ? TERM_GLOSSARY.get(source) : value;
+        return Objects.isNull(value) ? TranslationConstants.DEFAULT_TERM_GLOSSARY.get(source) : value;
     }
 
+    /**
+     * 将缺失翻译按字符阈值拆分为多个批次。
+     *
+     * @param missing 缺失翻译的文本列表
+     */
     private void translateMissing(List<String> missing) {
         List<String> batch = new ArrayList<>();
         int chars = 0;
         for (String source : missing) {
-            if (!batch.isEmpty() && chars + source.length() > MAX_BATCH_CHARS) {
+            if (!batch.isEmpty() && chars + source.length() > TranslationConstants.GOOGLE_TRANSLATION_MAX_BATCH_CHARS) {
                 translateBatch(batch);
                 batch.clear();
                 chars = 0;
@@ -220,31 +290,29 @@ public class DokkanTranslationService {
             batch.add(source);
             chars += source.length();
         }
-        if (!batch.isEmpty()) translateBatch(batch);
+        if (!batch.isEmpty()) {
+            translateBatch(batch);
+        }
     }
 
+    /**
+     * 翻译单个批次，失败时不写入缓存并保留源文本兜底。
+     *
+     * @param sources 批次原文列表
+     */
     private void translateBatch(List<String> sources) {
         boolean acquired = false;
         List<String> retrySources = new ArrayList<>(sources);
         try {
+            // 获取并发许可，限制外部翻译接口压力。
             translationPermits.acquire();
             acquired = true;
+            // 保护领域术语和行标记，避免远程翻译破坏结果拆分和术语一致性。
             ProtectedText protectedText = buildProtectedText(sources);
-            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-            form.add("client", "gtx");
-            form.add("sl", detectSourceLanguage(sources));
-            form.add("tl", "zh-CN");
-            form.add("dt", "t");
-            form.add("dj", "1");
-            form.add("q", protectedText.text());
-            String response = translationClient.post()
-                    .uri("/translate_a/single")
-                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .body(BodyInserters.fromFormData(form))
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block(Duration.ofSeconds(30));
+            String response = googleTranslationClient.translate(protectedText.text(), detectSourceLanguage(sources),
+                    sources.size());
             Map<Integer, String> translated = parseResponse(response, protectedText);
+            // 将完整行写入缓存，不完整行保留到单条重试。
             for (int i = 0; i < sources.size(); i++) {
                 String value = translated.get(i);
                 if (StringUtils.isNotBlank(value)) {
@@ -254,17 +322,38 @@ public class DokkanTranslationService {
             }
             log.info("Dokkan text translation completed, requested={}, translated={}", sources.size(), translated.size());
         } catch (Exception e) {
-            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.warn("Dokkan text translation failed; source text will be retained, count={}", sources.size(), e);
         } finally {
-            if (acquired) translationPermits.release();
+            if (acquired) {
+                translationPermits.release();
+            }
         }
-        if (sources.size() > 1 && !retrySources.isEmpty()) {
-            log.info("Retrying incomplete Dokkan translations individually, count={}", retrySources.size());
-            retrySources.forEach(source -> translateBatch(Collections.singletonList(source)));
-        }
+        retryIncompleteTranslations(sources, retrySources);
     }
 
+    /**
+     * 对批量翻译中缺失的行进行单条重试。
+     *
+     * @param sources      原批次文本列表
+     * @param retrySources 待重试文本列表
+     */
+    private void retryIncompleteTranslations(List<String> sources, List<String> retrySources) {
+        if (sources.size() <= 1 || retrySources.isEmpty()) {
+            return;
+        }
+        log.info("Retrying incomplete Dokkan translations individually, count={}", retrySources.size());
+        retrySources.forEach(source -> translateBatch(Collections.singletonList(source)));
+    }
+
+    /**
+     * 构建受保护翻译文本，按行标记合并多条文本。
+     *
+     * @param sources 原文列表
+     * @return 受保护文本上下文
+     */
     private ProtectedText buildProtectedText(List<String> sources) {
         StringBuilder text = new StringBuilder();
         Map<String, String> tokens = new LinkedHashMap<>();
@@ -274,187 +363,282 @@ public class DokkanTranslationService {
         Pattern protectedTerms = buildProtectedTermPattern(glossary);
         int tokenIndex = 0;
         for (int i = 0; i < sources.size(); i++) {
-            Matcher matcher = protectedTerms.matcher(sources.get(i));
-            StringBuilder protectedText = new StringBuilder();
-            while (matcher.find()) {
-                String sourceToken = matcher.group();
-                String key = sourceTokenKeys.get(sourceToken);
-                if (key == null) {
-                    key = "__DOKKAN_TOKEN_" + tokenIndex++ + "__";
-                    sourceTokenKeys.put(sourceToken, key);
-                    tokens.put(key, glossary.getOrDefault(sourceToken, sourceToken));
-                }
-                List<String> expectedTokens = rowTokens.computeIfAbsent(i, ignored -> new ArrayList<>());
-                if (!expectedTokens.contains(key)) expectedTokens.add(key);
-                matcher.appendReplacement(protectedText, Matcher.quoteReplacement(key));
-            }
-            matcher.appendTail(protectedText);
-            text.append(rowMarker(i)).append('\n').append(protectedText).append('\n');
+            tokenIndex = appendProtectedRow(sources.get(i), i, tokenIndex, protectedTerms,
+                    new ProtectedRowContext(text, tokens, sourceTokenKeys, rowTokens, glossary));
         }
-        text.append("__DOKKAN_ROW_END__");
+        text.append(TranslationConstants.ROW_END_MARKER);
         return new ProtectedText(text.toString(), tokens, rowTokens, sources.size());
     }
 
-    private Map<Integer, String> parseResponse(String response, ProtectedText protectedText) throws Exception {
-        JsonNode root = objectMapper.readTree(response);
-        StringBuilder translatedText = new StringBuilder();
-        for (JsonNode sentence : root.path("sentences")) {
-            translatedText.append(sentence.path("trans").asText(""));
-        }
-        Map<Integer, String> result = new LinkedHashMap<>();
-        String translated = translatedText.toString();
-        for (int i = 0; i < protectedText.size(); i++) {
-            String startMarker = rowMarker(i);
-            String endMarker = i + 1 < protectedText.size() ? rowMarker(i + 1) : "__DOKKAN_ROW_END__";
-            int start = translated.indexOf(startMarker);
-            int end = start < 0 ? -1 : translated.indexOf(endMarker, start + startMarker.length());
-            if (start < 0 || end < 0) continue;
-            String value = translated.substring(start + startMarker.length(), end).trim();
-            List<String> expectedTokens = protectedText.rowTokens().getOrDefault(i, Collections.emptyList());
-            boolean complete = true;
-            for (String token : expectedTokens) {
-                if (!value.contains(token)) {
-                    complete = false;
-                    log.warn("Incomplete Dokkan translation row, index={}, missingToken={}", i, token);
-                    break;
-                }
+    /**
+     * 追加单行受保护翻译文本，并记录该行期望保留的 token。
+     *
+     * @param source         原文文本
+     * @param rowIndex       行号
+     * @param tokenIndex     当前 token 序号
+     * @param protectedTerms 需要保护的术语模式
+     * @param context        受保护文本上下文
+     * @return 下一次可用 token 序号
+     */
+    private int appendProtectedRow(String source, int rowIndex, int tokenIndex, Pattern protectedTerms,
+                                   ProtectedRowContext context) {
+        Matcher matcher = protectedTerms.matcher(source);
+        StringBuilder protectedText = new StringBuilder();
+        int nextTokenIndex = tokenIndex;
+        while (matcher.find()) {
+            String sourceToken = matcher.group();
+            String key = context.sourceTokenKeys().get(sourceToken);
+            if (Objects.isNull(key)) {
+                key = TranslationConstants.TOKEN_MARKER_PREFIX + nextTokenIndex++
+                        + TranslationConstants.TOKEN_MARKER_SUFFIX;
+                context.sourceTokenKeys().put(sourceToken, key);
+                context.tokens().put(key, context.glossary().getOrDefault(sourceToken, sourceToken));
             }
-            if (!complete) continue;
-            for (String token : expectedTokens) value = value.replace(token, protectedText.tokens().get(token));
-            result.put(i, value);
+            List<String> expectedTokens = context.rowTokens().computeIfAbsent(rowIndex, ignored -> new ArrayList<>());
+            if (!expectedTokens.contains(key)) {
+                expectedTokens.add(key);
+            }
+            matcher.appendReplacement(protectedText, Matcher.quoteReplacement(key));
+        }
+        matcher.appendTail(protectedText);
+        context.text()
+                .append(rowMarker(rowIndex))
+                .append(TranslationConstants.BATCH_ROW_SEPARATOR)
+                .append(protectedText)
+                .append(TranslationConstants.BATCH_ROW_SEPARATOR);
+        return nextTokenIndex;
+    }
+
+    /**
+     * 解析 Google 翻译响应，并按行标记还原为行号到译文的映射。
+     *
+     * @param response      Google 翻译原始响应
+     * @param protectedText 受保护文本上下文
+     * @return 行号到译文的映射
+     */
+    private Map<Integer, String> parseResponse(String response, ProtectedText protectedText) {
+        List<String> sentenceTexts = JsonUtils.readArrayFieldTexts(response,
+                TranslationConstants.GOOGLE_RESPONSE_FIELD_SENTENCES,
+                TranslationConstants.GOOGLE_RESPONSE_FIELD_TRANS);
+        String translated = String.join(StringUtils.EMPTY, sentenceTexts);
+        Map<Integer, String> result = new LinkedHashMap<>();
+        for (int i = 0; i < protectedText.size(); i++) {
+            String value = extractRow(translated, i, protectedText);
+            if (StringUtils.isNotBlank(value)) {
+                result.put(i, value);
+            }
         }
         return result;
     }
 
+    /**
+     * 从合并译文中抽取指定行，并恢复该行受保护术语。
+     *
+     * @param translated     合并译文
+     * @param index          行号
+     * @param protectedText  受保护文本上下文
+     * @return 指定行译文，标记缺失或 token 缺失时返回 null
+     */
+    private String extractRow(String translated, int index, ProtectedText protectedText) {
+        String startMarker = rowMarker(index);
+        String endMarker = index + 1 < protectedText.size() ? rowMarker(index + 1) : TranslationConstants.ROW_END_MARKER;
+        int start = translated.indexOf(startMarker);
+        int end = start < 0 ? -1 : translated.indexOf(endMarker, start + startMarker.length());
+        if (start < 0 || end < 0) {
+            return null;
+        }
+        String value = translated.substring(start + startMarker.length(), end).trim();
+        List<String> expectedTokens = protectedText.rowTokens().getOrDefault(index, Collections.emptyList());
+        for (String token : expectedTokens) {
+            if (!value.contains(token)) {
+                log.warn("Incomplete Dokkan translation row, index={}, missingToken={}", index, token);
+                return null;
+            }
+        }
+        for (String token : expectedTokens) {
+            value = value.replace(token, protectedText.tokens().get(token));
+        }
+        return value;
+    }
+
+    /**
+     * 构建批量翻译行标记。
+     *
+     * @param index 行号
+     * @return 行标记
+     */
     private String rowMarker(int index) {
-        return "__DOKKAN_ROW_" + index + "__";
+        return TranslationConstants.ROW_MARKER_PREFIX + index + TranslationConstants.ROW_MARKER_SUFFIX;
     }
 
+    /**
+     * 根据是否存在日文假名判断 Google 翻译源语言。
+     *
+     * @param sources 原文列表
+     * @return Google 翻译源语言编码
+     */
     private String detectSourceLanguage(List<String> sources) {
-        return sources.stream().filter(Objects::nonNull).anyMatch(text -> JAPANESE_KANA.matcher(text).find())
-                ? "ja" : "en";
+        return sources.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(text -> JAPANESE_KANA.matcher(text).find())
+                ? TranslationConstants.LANGUAGE_JA : TranslationConstants.LANGUAGE_EN;
     }
 
+    /**
+     * 归一化翻译术语，修正常见机器翻译表述。
+     *
+     * @param translated 原始译文
+     * @return 归一化译文
+     */
     private String normalizeTerms(String translated) {
-        return ZhConverterUtil.toSimple(translated)
-                .replace("攻击力", "ATK")
-                .replace("防御力", "DEF")
-                .replace("生命值", "HP")
-                .replaceAll("(?i)\\bKi\\b", "气力")
-                .replaceAll("(?m)^\\?", "・")
-                .replace("超高概率", "超高机率")
-                .replace("高概率", "高机率")
-                .replace("中概率", "中等机率")
-                .replace("几率", "机率")
-                .replace("概率", "机率")
-                .replace("大幅度提升", "大幅提升")
-                .replaceAll("(\\d+)转", "$1回合")
-                .replaceAll("(\\d+)[ \\t]*个?[ \\t]*回合", "$1回合")
-                .replaceAll("ATK[ \\t]*(?:和|与|&)[ \\t]*DEF", "ATK与DEF")
-                .replaceAll("HP[ \\t]*[、,，][ \\t]*ATK与DEF", "HP、ATK、DEF")
-                .replaceAll("[ \\t]+([，。；：、%])", "$1")
-                .replace("闪避", "回避")
-                .replace("伤害减少率", "伤害减轻率")
-                .replace("伤害减免率", "伤害减轻率")
-                .replace("防范一切攻击", "防御所有攻击")
-                .replace("类别类别", "类别");
+        String normalized = TranslationUtils.toSimpleChineseText(translated);
+        for (Map.Entry<String, String> entry : TranslationConstants.NORMALIZE_TEXT_REPLACEMENTS.entrySet()) {
+            normalized = normalized.replace(entry.getKey(), entry.getValue());
+        }
+        return normalized
+                .replaceAll(TranslationConstants.NORMALIZE_REGEX_KI_WORD,
+                        TranslationConstants.NORMALIZE_REPLACEMENT_KI)
+                .replaceAll(TranslationConstants.NORMALIZE_REGEX_LINE_START_QUESTION,
+                        TranslationConstants.NORMALIZE_REPLACEMENT_BULLET)
+                .replaceAll(TranslationConstants.NORMALIZE_REGEX_TURN_SUFFIX,
+                        TranslationConstants.NORMALIZE_REPLACEMENT_TURN)
+                .replaceAll(TranslationConstants.NORMALIZE_REGEX_TURN_WITH_SPACES,
+                        TranslationConstants.NORMALIZE_REPLACEMENT_TURN)
+                .replaceAll(TranslationConstants.NORMALIZE_REGEX_ATK_DEF_CONNECTOR,
+                        TranslationConstants.NORMALIZE_REPLACEMENT_ATK_DEF)
+                .replaceAll(TranslationConstants.NORMALIZE_REGEX_HP_ATK_DEF,
+                        TranslationConstants.NORMALIZE_REPLACEMENT_HP_ATK_DEF)
+                .replaceAll(TranslationConstants.NORMALIZE_REGEX_SPACE_BEFORE_PUNCTUATION,
+                        TranslationConstants.NORMALIZE_REPLACEMENT_FIRST_GROUP);
     }
 
+    /**
+     * 持久化翻译缓存，失败时只记录日志，不影响当前翻译返回。
+     */
     private void persistCache() {
         synchronized (cacheWriteLock) {
             Path target = Path.of(cacheFile).toAbsolutePath().normalize();
-            Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+            Path temp = target.resolveSibling(target.getFileName() + TranslationConstants.CACHE_TEMP_FILE_SUFFIX);
             try {
+                // 先写临时文件，再移动到目标文件，减少写入中断导致的缓存损坏。
                 Files.createDirectories(Objects.requireNonNull(target.getParent()));
-                Map<String, Object> payload = new LinkedHashMap<>();
-                payload.put("version", CACHE_FORMAT_VERSION);
-                payload.put("glossaryHash", glossaryHash());
-                payload.put("translations", cache.entrySet().stream()
-                        .sorted(Map.Entry.comparingByKey())
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
-                                (left, right) -> left, LinkedHashMap::new)));
-                objectMapper.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), payload);
-                try {
-                    Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-                } catch (Exception ignored) {
-                    Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
-                }
+                JsonUtils.writeJson2File(buildCachePayload(), temp);
+                moveCacheFile(temp, target);
             } catch (Exception e) {
                 log.warn("Failed to persist Dokkan translation cache, path={}", target, e);
             }
         }
     }
 
-    private record ProtectedText(String text, Map<String, String> tokens,
-                                 Map<Integer, List<String>> rowTokens, int size) {}
-    private record NamedEntry(Long id, String name) {}
+    /**
+     * 构建缓存持久化载荷，翻译明细按 key 排序保证文件稳定。
+     *
+     * @return 缓存 JSON 载荷
+     */
+    private Map<String, Object> buildCachePayload() {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put(TranslationConstants.CACHE_FIELD_VERSION, TranslationConstants.CACHE_FORMAT_VERSION);
+        payload.put(TranslationConstants.CACHE_FIELD_GLOSSARY_HASH, glossaryHash());
+        payload.put(TranslationConstants.CACHE_FIELD_TRANSLATIONS, cache.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (left, right) -> left, LinkedHashMap::new)));
+        return payload;
+    }
 
+    /**
+     * 移动缓存临时文件到目标文件，原子移动失败时降级为普通覆盖移动。
+     *
+     * @param temp   缓存临时文件
+     * @param target 缓存目标文件
+     * @throws Exception 文件移动失败时抛出
+     */
+    private void moveCacheFile(Path temp, Path target) throws Exception {
+        try {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (Exception ignored) {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /**
+     * 生成当前可用词表快照，静态词表优先级最低，自定义词表最高。
+     *
+     * @return 词表快照
+     */
     private Map<String, String> glossarySnapshot() {
-        Map<String, String> result = new LinkedHashMap<>(TERM_GLOSSARY);
+        Map<String, String> result = new LinkedHashMap<>(TranslationConstants.DEFAULT_TERM_GLOSSARY);
         result.putAll(domainGlossary);
         result.putAll(customGlossary);
         return result;
     }
 
+    /**
+     * 写入自定义术语，并清理同源缓存。
+     *
+     * @param source 原文术语
+     * @param target 中文术语
+     */
     private void putCustomTerm(String source, String target) {
-        if (StringUtils.isAnyBlank(source, target)) return;
-        customGlossary.put(source, ZhConverterUtil.toSimple(target));
+        if (StringUtils.isAnyBlank(source, target)) {
+            return;
+        }
+        customGlossary.put(source, TranslationUtils.toSimpleChineseText(target));
         cache.remove(source);
     }
 
+    /**
+     * 计算词表哈希，用于判断缓存是否仍然适配当前词表。
+     *
+     * @return 词表哈希
+     */
     private int glossaryHash() {
-        return 31 * TERM_GLOSSARY.hashCode() + customGlossary.hashCode();
+        return TranslationConstants.GLOSSARY_HASH_BASE * TranslationConstants.DEFAULT_TERM_GLOSSARY.hashCode()
+                + customGlossary.hashCode();
     }
 
+    /**
+     * 构建受保护术语匹配模式，长术语优先匹配避免被短术语截断。
+     *
+     * @param glossary 术语表
+     * @return 受保护术语匹配模式
+     */
     private static Pattern buildProtectedTermPattern(Map<String, String> glossary) {
         String glossaryTerms = glossary.keySet().stream()
                 .filter(StringUtils::isNotBlank)
                 .sorted(Comparator.comparingInt(String::length).reversed())
                 .map(Pattern::quote)
-                .collect(Collectors.joining("|"));
-        return Pattern.compile("\\{[^{}]+}|(?i:\\b(?:LR|UR|SSR|HERO|BOSS)\\b)|" + glossaryTerms);
+                .collect(Collectors.joining(TranslationConstants.REGEX_OR_SEPARATOR));
+        String pattern = StringUtils.isBlank(glossaryTerms)
+                ? TranslationConstants.DEFAULT_PROTECTED_TERM_REGEX
+                : TranslationConstants.DEFAULT_PROTECTED_TERM_REGEX + TranslationConstants.REGEX_OR_SEPARATOR + glossaryTerms;
+        return Pattern.compile(pattern);
     }
 
-    private static Map<String, String> buildGlossary() {
-        Map<String, String> terms = new LinkedHashMap<>();
-        terms.put("ダメージ軽減率", "伤害减轻率");
-        terms.put("超高確率", "超高机率");
-        terms.put("高確率", "高机率");
-        terms.put("中確率", "中等机率");
-        terms.put("必殺技", "必杀技");
-        terms.put("超必殺技", "超必杀技");
-        terms.put("アクティブスキル", "主动技能");
-        terms.put("パッシブスキル", "被动技能");
-        terms.put("リーダースキル", "队长技");
-        terms.put("サイヤ人", "赛亚人");
-        terms.put("人造人間", "人造人");
-        terms.put("魔人ブウ", "魔人布欧");
-        terms.put("ベジータ", "贝吉塔");
-        terms.put("フリーザ", "弗利萨");
-        terms.put("ピッコロ", "比克");
-        terms.put("トランクス", "特兰克斯");
-        terms.put("クリリン", "克林");
-        terms.put("孫悟空", "孙悟空");
-        terms.put("孫悟飯", "孙悟饭");
-        terms.put("超サイヤ人", "超级赛亚人");
-        terms.put("気力", "气力");
-        terms.put("気玉", "气珠");
-        terms.put("虹気玉", "彩虹珠");
-        terms.put("属性気玉", "属性气珠");
-        terms.put("カテゴリ", "类别");
-        terms.put("ターン", "回合");
-        terms.put("味方全員", "我方全体");
-        terms.put("自身", "自身");
-        terms.put("敵", "敌人");
-        terms.put("回避率", "回避率");
-        terms.put("会心の一撃", "奋力一击");
-        terms.put("必ず追加攻撃", "必可发动追加攻击");
-        terms.put("全属性に効果抜群で攻撃", "对全属性造成属性克制伤害");
-        terms.put("全ての攻撃をガード", "防御所有攻击");
-        terms.put("必殺技を封じる", "封锁必杀技");
-        terms.put("気絶させる", "使其晕眩");
-        terms.put("極系", "极系");
-        terms.put("超系", "超系");
-        return Collections.unmodifiableMap(terms);
+    /**
+     * 受保护翻译文本上下文。
+     *
+     * @param text      合并后的请求文本
+     * @param tokens    token 到目标术语的映射
+     * @param rowTokens 行号到该行期望 token 的映射
+     * @param size      原文行数
+     */
+    private record ProtectedText(String text, Map<String, String> tokens,
+                                 Map<Integer, List<String>> rowTokens, int size) {
+    }
+
+    /**
+     * 追加受保护文本时的可变上下文。
+     *
+     * @param text            合并文本构造器
+     * @param tokens          token 到目标术语的映射
+     * @param sourceTokenKeys 原文术语到 token 的映射
+     * @param rowTokens       行号到该行期望 token 的映射
+     * @param glossary        当前词表快照
+     */
+    private record ProtectedRowContext(StringBuilder text, Map<String, String> tokens,
+                                       Map<String, String> sourceTokenKeys,
+                                       Map<Integer, List<String>> rowTokens,
+                                       Map<String, String> glossary) {
     }
 }

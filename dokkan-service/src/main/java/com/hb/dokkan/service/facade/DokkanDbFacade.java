@@ -1,5 +1,6 @@
 package com.hb.dokkan.service.facade;
 
+import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.domain.dto.data.dokkandb.DokkanDbCardDTO;
 import com.hb.dokkan.common.domain.dto.data.dokkandb.DokkanDbCardStatsDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardDTO;
@@ -7,35 +8,28 @@ import com.hb.dokkan.common.domain.dto.data.wiki.WikiCategoryDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiLinkDTO;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.http.RetryTemplate;
+import com.hb.dokkan.service.client.DokkanDbClient;
 import com.hb.dokkan.service.convert.DokkanDbCardAssembler;
 import com.hb.dokkan.service.translation.DokkanTranslationService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 
-import java.time.Duration;
 import java.util.Collections;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Structured DokkanDB client. Global English is preferred and JP is the fallback. */
+/**
+ * @Description DokkanDB外部数据门面
+ * @Author stargazer
+ * @Date 2026/8/15 21:20
+ **/
 @Slf4j
 @Service
 public class DokkanDbFacade {
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
-
-    @Resource
-    @Qualifier("dokkanDbWebClient")
-    private WebClient jpClient;
-
-    @Resource
-    @Qualifier("dokkanDbGlobalWebClient")
-    private WebClient globalClient;
 
     @Resource
     private HttpPoolProperties httpPoolProperties;
@@ -46,45 +40,55 @@ public class DokkanDbFacade {
     @Resource
     private DokkanTranslationService translationService;
 
+    @Resource
+    private DokkanDbClient dokkanDbClient;
+
+    /**
+     * 获取最近卡片目录，Global 优先，空结果时降级 JP。
+     *
+     * @param size 查询数量
+     * @return 最近卡片目录
+     */
     public List<DokkanDbCardDTO> getRecentCatalog(int size) {
         return RetryTemplate.executeWithRetrySliently(() -> {
-            List<DokkanDbCardDTO> rows;
-            try {
-                rows = fetchCatalog(globalClient, size);
-            } catch (Exception e) {
-                log.warn("DokkanDB Global catalog unavailable, falling back to JP", e);
-                rows = Collections.emptyList();
+            // Global 优先，失败或空结果时使用 JP 数据源兜底。
+            List<DokkanDbCardDTO> rows = dokkanDbClient.listRecentCatalogFromGlobal(size);
+            if (rows == null || rows.isEmpty()) {
+                rows = dokkanDbClient.listRecentCatalogFromJp(size);
             }
-            if (rows == null || rows.isEmpty()) rows = fetchCatalog(jpClient, size);
             return rows == null ? Collections.emptyList() : rows;
         }, httpPoolProperties.getRetry(), "getDokkanDbRecentCatalog");
     }
 
+    /**
+     * 获取单张卡片详情并转换为 wiki 持久化模型。
+     *
+     * @param cardId 卡片 ID
+     * @return wiki 卡片模型，查不到时返回 null
+     */
     public WikiCardDTO getCard(Long cardId) {
         return RetryTemplate.executeWithRetrySliently(() -> {
-            WebClient selectedClient = globalClient;
-            List<DokkanDbCardDTO> cards;
-            try {
-                cards = fetchCard(globalClient, cardId);
-            } catch (Exception e) {
-                log.warn("DokkanDB Global card unavailable, falling back to JP, cardId:{}", cardId, e);
-                cards = Collections.emptyList();
+            // 先查 Global，查不到再查 JP，并记录最终命中的数据源用于查询数值。
+            DokkanDbClient.Source selectedSource = DokkanDbClient.Source.GLOBAL;
+            List<DokkanDbCardDTO> cards = dokkanDbClient.listCardsFromGlobal(cardId);
+            if (cards == null || cards.isEmpty()) {
+                selectedSource = DokkanDbClient.Source.JP;
+                cards = dokkanDbClient.listCardsFromJp(cardId);
             }
             if (cards == null || cards.isEmpty()) {
-                selectedClient = jpClient;
-                cards = fetchCard(jpClient, cardId);
+                return null;
             }
-            if (cards == null || cards.isEmpty()) return null;
-            List<DokkanDbCardStatsDTO> stats = selectedClient.get()
-                    .uri(uri -> uri.path("/api/card-stats-with-hp").queryParam("p_card_id", cardId).build())
-                    .retrieve()
-                    .bodyToFlux(DokkanDbCardStatsDTO.class)
-                    .collectList()
-                    .block(REQUEST_TIMEOUT);
+            List<DokkanDbCardStatsDTO> stats = dokkanDbClient.listCardStats(selectedSource, cardId);
             return assembler.assemble(cards.getFirst(), stats == null || stats.isEmpty() ? null : stats.getFirst());
         }, httpPoolProperties.getRetry(), "getDokkanDbCard-cardId:" + cardId);
     }
 
+    /**
+     * 批量获取卡片详情。
+     *
+     * @param cardIds 卡片 ID 列表
+     * @return wiki 卡片模型列表
+     */
     public List<WikiCardDTO> getCards(List<Long> cardIds) {
         return cardIds.parallelStream()
                 .map(this::getCard)
@@ -92,84 +96,54 @@ public class DokkanDbFacade {
                 .toList();
     }
 
+    /**
+     * 获取分类列表并翻译分类名称。
+     *
+     * @return 分类列表
+     */
     public List<WikiCategoryDTO> getCategories() {
-        List<WikiCategoryDTO> rows = getNamedRows(globalClient, "/api/categories", WikiCategoryDTO.class);
-        if (rows.isEmpty()) rows = getNamedRows(jpClient, "/api/categories", WikiCategoryDTO.class);
+        List<WikiCategoryDTO> rows = dokkanDbClient.listCategoriesFromGlobal();
+        if (rows.isEmpty()) {
+            rows = dokkanDbClient.listCategoriesFromJp();
+        }
         List<String> translated = translationService.translateAll(rows.stream()
-                .map(WikiCategoryDTO::getCategoryName).toList());
-        for (int i = 0; i < rows.size(); i++) rows.get(i).setCategoryName(translated.get(i));
+                .map(WikiCategoryDTO::getCategoryName)
+                .toList());
+        for (int i = 0; i < rows.size(); i++) {
+            rows.get(i).setCategoryName(translated.get(i));
+        }
         return rows;
     }
 
+    /**
+     * 获取链接列表并翻译链接名称与效果描述。
+     *
+     * @return 链接列表
+     */
     public List<WikiLinkDTO> getLinks() {
-        List<WikiLinkDTO> rows = getNamedRows(globalClient, "/api/links", WikiLinkDTO.class);
-        if (rows.isEmpty()) rows = getNamedRows(jpClient, "/api/links", WikiLinkDTO.class);
-        Map<Long, LinkEffect> effects = getLinkEffects(rows.stream().map(WikiLinkDTO::getLinkId).toList()).stream()
+        List<WikiLinkDTO> rows = dokkanDbClient.listLinksFromGlobal();
+        if (rows.isEmpty()) {
+            rows = dokkanDbClient.listLinksFromJp();
+        }
+        Map<Long, DokkanDbClient.LinkEffect> effects = dokkanDbClient.listLinkEffects(
+                        rows.stream().map(WikiLinkDTO::getLinkId).toList())
+                .stream()
                 .filter(effect -> effect.id() != null)
-                .collect(Collectors.toMap(LinkEffect::id, Function.identity(), (left, right) -> left));
+                .collect(Collectors.toMap(DokkanDbClient.LinkEffect::id, Function.identity(), (left, right) -> left));
         List<String> sourceTexts = new java.util.ArrayList<>();
         for (WikiLinkDTO row : rows) {
-            LinkEffect effect = effects.get(row.getLinkId());
+            DokkanDbClient.LinkEffect effect = effects.get(row.getLinkId());
             sourceTexts.add(row.getLinkName());
             sourceTexts.add(effect == null ? null : effect.description());
             sourceTexts.add(effect == null ? null : effect.description10());
         }
         List<String> translated = translationService.translateAll(sourceTexts);
         for (int i = 0; i < rows.size(); i++) {
-            rows.get(i).setLinkName(translated.get(i * 3));
-            rows.get(i).setLevel1Description(translated.get(i * 3 + 1));
-            rows.get(i).setLevel10Description(translated.get(i * 3 + 2));
+            int offset = i * CardSyncConstants.LINK_TRANSLATION_TEXT_COUNT;
+            rows.get(i).setLinkName(translated.get(offset + CardSyncConstants.LINK_NAME_TEXT_OFFSET));
+            rows.get(i).setLevel1Description(translated.get(offset + CardSyncConstants.LINK_LEVEL_1_TEXT_OFFSET));
+            rows.get(i).setLevel10Description(translated.get(offset + CardSyncConstants.LINK_LEVEL_10_TEXT_OFFSET));
         }
         return rows;
     }
-
-    private List<LinkEffect> getLinkEffects(List<Long> linkIds) {
-        String ids = linkIds.stream().filter(Objects::nonNull).map(String::valueOf).collect(Collectors.joining(","));
-        if (ids.isEmpty()) return Collections.emptyList();
-        return RetryTemplate.executeWithRetrySliently(() -> {
-            List<LinkEffect> rows = globalClient.get()
-                    .uri(uri -> uri.path("/api/link-skill-effects-by-ids").queryParam("ids", ids).build())
-                    .retrieve()
-                    .bodyToFlux(LinkEffect.class)
-                    .collectList()
-                    .block(REQUEST_TIMEOUT);
-            return rows == null ? Collections.emptyList() : rows;
-        }, httpPoolProperties.getRetry(), "getDokkanDbLinkEffects");
-    }
-
-    private List<DokkanDbCardDTO> fetchCatalog(WebClient sourceClient, int size) {
-        return sourceClient.get()
-                .uri(uri -> uri.path("/api/cards-catalog-with-transformations")
-                        .queryParam("chunk", 1)
-                        .queryParam("chunk_size", size)
-                        .build())
-                .retrieve()
-                .bodyToFlux(DokkanDbCardDTO.class)
-                .collectList()
-                .block(REQUEST_TIMEOUT);
-    }
-
-    private List<DokkanDbCardDTO> fetchCard(WebClient sourceClient, Long cardId) {
-        return sourceClient.get()
-                .uri(uri -> uri.path("/api/card").queryParam("code", cardId).build())
-                .retrieve()
-                .bodyToFlux(DokkanDbCardDTO.class)
-                .collectList()
-                .block(REQUEST_TIMEOUT);
-    }
-
-    private <T> List<T> getNamedRows(WebClient sourceClient, String path, Class<T> type) {
-        return RetryTemplate.executeWithRetrySliently(() -> {
-            List<T> rows = sourceClient.get()
-                    .uri(uri -> uri.path(path).build())
-                    .retrieve()
-                    .bodyToFlux(type)
-                    .collectList()
-                    .block(REQUEST_TIMEOUT);
-            return rows == null ? Collections.emptyList() : rows;
-        }, httpPoolProperties.getRetry(), "getDokkanDbNamedRows-path:" + path);
-    }
-
-    private record LinkEffect(Long id, String description,
-                              @com.fasterxml.jackson.annotation.JsonProperty("description_10") String description10) {}
 }

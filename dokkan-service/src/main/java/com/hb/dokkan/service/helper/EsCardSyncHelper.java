@@ -1,7 +1,7 @@
 package com.hb.dokkan.service.helper;
 
-import com.alibaba.fastjson.JSON;
 import com.google.common.collect.Lists;
+import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.EsCardAttributeKey;
 import com.hb.dokkan.common.domain.dto.cards.CardAttributeDTO;
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
@@ -22,11 +22,22 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.hb.dokkan.common.constants.DokkanConstants.*;
+import static com.hb.dokkan.common.constants.DokkanConstants.CARD;
+import static com.hb.dokkan.common.constants.DokkanConstants.CATEGORY;
+import static com.hb.dokkan.common.constants.DokkanConstants.EZA_CARD;
+import static com.hb.dokkan.common.constants.DokkanConstants.LINK;
+import static com.hb.dokkan.common.constants.DokkanConstants.SKILL;
+import static com.hb.dokkan.common.constants.DokkanConstants.SPECIAL;
 
 /**
  * @Description es卡片同步助手
@@ -44,16 +55,19 @@ public class EsCardSyncHelper {
     private CardIconStorageService cardIconStorageService;
 
     /**
-     * 构建es卡片po
+     * 构建 ES 卡片文档。
+     *
+     * @param dataMap MySQL 卡片及关联数据
+     * @return ES 卡片文档列表
      */
     public List<CardEsPO> buildEsCardPO(Map<String, List<?>> dataMap) {
         List<CardEsPO> esCards = new ArrayList<>();
-        List<CardPO> cards = (List<CardPO>) dataMap.get(CARD);
-        List<DokkanCategoryPO> categories = (List<DokkanCategoryPO>) dataMap.get(CATEGORY);
-        List<DokkanLinkPO> links = (List<DokkanLinkPO>) dataMap.get(LINK);
-        List<EzaCardPO> ezaCardPOS = (List<EzaCardPO>) dataMap.get(EZA_CARD);
-        List<SpecialPO> specialPOS = (List<SpecialPO>) dataMap.get(SPECIAL);
-        List<SkillPO> skillPOS = (List<SkillPO>) dataMap.get(SKILL);
+        List<CardPO> cards = typedList(dataMap, CARD);
+        List<DokkanCategoryPO> categories = typedList(dataMap, CATEGORY);
+        List<DokkanLinkPO> links = typedList(dataMap, LINK);
+        List<EzaCardPO> ezaCardPOS = typedList(dataMap, EZA_CARD);
+        List<SpecialPO> specialPOS = typedList(dataMap, SPECIAL);
+        List<SkillPO> skillPOS = typedList(dataMap, SKILL);
         if (CollectionUtils.isEmpty(cards)) {
             return esCards;
         }
@@ -74,47 +88,51 @@ public class EsCardSyncHelper {
             esCardPO.setAtkValue(card.getAtkValue());
             esCardPO.setPublishTime(card.getPublishTime());
             CardAttributeDTO attribute = JsonUtils.json2Object(card.getAttributes(), CardAttributeDTO.class);
-            // card扩展信息
+
+            // 按卡片属性中的关联 ID 组装分类、链接、技能、必杀等 ES 展示字段。
             buildCardBaseAttr(esCardPO, attribute, links, categories);
-
-            // card极限信息
             buildEzaInfo(esCardPO, ezaCardPOS);
-
-            // card必杀信息
             buildSuperInfo(esCardPO, specialPOS, attribute);
-
-            // card技能信息
             buildSkillInfo(esCardPO, skillPOS, attribute);
-            //扩展属性
             buildAttributeInfo(esCardPO, card);
         });
         return esCards;
     }
 
+    /**
+     * 构建 ES 扩展属性。
+     *
+     * @param esCardPO ES 卡片文档
+     * @param card     MySQL 卡片数据
+     */
     private void buildAttributeInfo(CardEsPO esCardPO, CardPO card) {
         if (StringUtils.isBlank(card.getAttributes())) {
             return;
         }
-        Map<String,Object> attributes = new HashMap<>();
+        Map<String, Object> attributes = new HashMap<>();
         CardAttributeDTO cardAttributeDTO = JsonUtils.json2Object(card.getAttributes(), CardAttributeDTO.class);
         if (Objects.isNull(cardAttributeDTO)) {
             return;
         }
-        attributes.put(EsCardAttributeKey.TRANSFORMATIONS, JSON.toJSONString(cardAttributeDTO.getNextCards()));
+        attributes.put(EsCardAttributeKey.TRANSFORMATIONS, JsonUtils.object2Json(cardAttributeDTO.getNextCards()));
         esCardPO.setAttributes(attributes);
     }
 
     /**
-     * 构建卡片技能信息
+     * 构建卡片技能信息。
+     *
+     * @param esCardPO ES 卡片文档
+     * @param skillPOS 技能持久化数据
+     * @param attribute 卡片扩展属性
      */
     private void buildSkillInfo(CardEsPO esCardPO, List<SkillPO> skillPOS, CardAttributeDTO attribute) {
-        if (CollectionUtils.isEmpty(skillPOS)) {
+        if (CollectionUtils.isEmpty(skillPOS) || Objects.isNull(attribute)) {
             log.error("skill数据查询失败");
             return;
         }
         Map<String, SkillPO> skillPOMap = skillPOS.stream()
                 .collect(Collectors.toMap(SkillPO::getSkillId, Function.identity(), (oldValue, newValue) -> newValue));
-        if (!CollectionUtils.isEmpty(attribute.getStandBySkillIds()))  {
+        if (!CollectionUtils.isEmpty(attribute.getStandBySkillIds())) {
             List<SkillPO> standBySkills = Lists.newArrayList();
             esCardPO.setStandBySkills(standBySkills);
             attribute.getStandBySkillIds().forEach(skillId -> {
@@ -124,7 +142,7 @@ public class EsCardSyncHelper {
                 }
             });
         }
-        if (!CollectionUtils.isEmpty(attribute.getFinishSkillIds()))  {
+        if (!CollectionUtils.isEmpty(attribute.getFinishSkillIds())) {
             List<SkillPO> finishSkills = Lists.newArrayList();
             esCardPO.setFinishSkills(finishSkills);
             attribute.getFinishSkillIds().forEach(finishSkillId -> {
@@ -137,16 +155,20 @@ public class EsCardSyncHelper {
     }
 
     /**
-     * 必杀信息构建
+     * 构建卡片必杀信息。
+     *
+     * @param esCardPO  ES 卡片文档
+     * @param specialPOS 必杀持久化数据
+     * @param attribute  卡片扩展属性
      */
     private void buildSuperInfo(CardEsPO esCardPO, List<SpecialPO> specialPOS, CardAttributeDTO attribute) {
-        if (CollectionUtils.isEmpty(specialPOS) || Objects.isNull(attribute))  {
+        if (CollectionUtils.isEmpty(specialPOS) || Objects.isNull(attribute)) {
             log.error("cardId:{} 没有必杀信息", esCardPO.getCardId());
             return;
         }
         Map<Long, SpecialPO> specialMap = specialPOS.stream()
                 .collect(Collectors.toMap(SpecialPO::getSpecialId, Function.identity(), (oldValue, newValue) -> newValue));
-        if (!CollectionUtils.isEmpty(attribute.getSpecialSkillIds()))  {
+        if (!CollectionUtils.isEmpty(attribute.getSpecialSkillIds())) {
             List<SpecialPO> specialSkills = Lists.newArrayList();
             esCardPO.setSpecialSkills(specialSkills);
             attribute.getSpecialSkillIds().forEach(specialId -> {
@@ -159,7 +181,10 @@ public class EsCardSyncHelper {
     }
 
     /**
-     * 构建卡片极限信息
+     * 构建卡片极限信息。
+     *
+     * @param esCardPO ES 卡片文档
+     * @param ezaCardPOS 极限持久化数据
      */
     private void buildEzaInfo(CardEsPO esCardPO, List<EzaCardPO> ezaCardPOS) {
         if (CollectionUtils.isEmpty(ezaCardPOS)) {
@@ -177,13 +202,13 @@ public class EsCardSyncHelper {
             return;
         }
         esCardPO.setEzaFlag(true);
-        esCardPO.setSuperEzaFlag(currentEzaCards.size() > 1);
+        esCardPO.setSuperEzaFlag(currentEzaCards.size() > CardSyncConstants.SUPER_EZA_COUNT_THRESHOLD);
         for (int i = 0; i < currentEzaCards.size(); i++) {
             EzaCardPO ezaCardPO = currentEzaCards.get(i);
             esCardPO.setEzaHpValue(ezaCardPO.getHpValue());
             esCardPO.setEzaDefValue(ezaCardPO.getDefValue());
             esCardPO.setEzaAtkValue(ezaCardPO.getAtkValue());
-            if (i < 1) {
+            if (i == CardSyncConstants.EZA_BASE_INDEX) {
                 esCardPO.setEzaPublishTime(ezaCardPO.getPublishTime());
                 esCardPO.setEzaLeaderSkill(ezaCardPO.getLeaderSkill());
                 esCardPO.setEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
@@ -192,20 +217,27 @@ public class EsCardSyncHelper {
                 esCardPO.setSuperEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
             }
         }
-        if (Objects.isNull(esCardPO.getPublishTime()) && Objects.isNull(esCardPO.getEzaPublishTime()) && Objects.isNull(esCardPO.getSuperEzaPublishTime())) {
+        if (Objects.isNull(esCardPO.getPublishTime()) && Objects.isNull(esCardPO.getEzaPublishTime())
+                && Objects.isNull(esCardPO.getSuperEzaPublishTime())) {
             return;
         }
-        Date latestPublishTime = DateUtils.latestDate(esCardPO.getPublishTime(), esCardPO.getEzaPublishTime(), esCardPO.getSuperEzaPublishTime());
+        Date latestPublishTime = DateUtils.latestDate(esCardPO.getPublishTime(), esCardPO.getEzaPublishTime(),
+                esCardPO.getSuperEzaPublishTime());
         if (Objects.nonNull(latestPublishTime)) {
             esCardPO.setOrderByTime(latestPublishTime);
         }
-
     }
 
     /**
-     * 构建卡片基础属性
+     * 构建卡片基础扩展属性。
+     *
+     * @param esCardPO  ES 卡片文档
+     * @param attributes 卡片扩展属性
+     * @param links      链接持久化数据
+     * @param categories 分类持久化数据
      */
-    private void buildCardBaseAttr(CardEsPO esCardPO, CardAttributeDTO attributes, List<DokkanLinkPO> links, List<DokkanCategoryPO> categories) {
+    private void buildCardBaseAttr(CardEsPO esCardPO, CardAttributeDTO attributes,
+                                   List<DokkanLinkPO> links, List<DokkanCategoryPO> categories) {
         if (Objects.isNull(attributes)) {
             return;
         }
@@ -220,14 +252,19 @@ public class EsCardSyncHelper {
         esCardPO.setPotentials(dokkanEsSyncConvert.convert2PotentialDTO(attributes.getPotential()));
         if (!CollectionUtils.isEmpty(attributes.getNextCards())) {
             attributes.getNextCards().stream()
-                    .filter(nextCard ->
-                            esCardPO.getCardId().equals(nextCard.getStartCardId()))
+                    .filter(nextCard -> esCardPO.getCardId().equals(nextCard.getStartCardId()))
                     .findAny()
-                    .ifPresent(nextCard ->
-                            esCardPO.setNextCardId(nextCard.getNextCardId()));
+                    .ifPresent(nextCard -> esCardPO.setNextCardId(nextCard.getNextCardId()));
         }
     }
 
+    /**
+     * 构建链接名称展示文本。
+     *
+     * @param links  链接持久化数据
+     * @param linkId 链接 ID 列表
+     * @return 链接名称展示文本
+     */
     private String buildLinkName(List<DokkanLinkPO> links, List<Long> linkId) {
         if (CollectionUtils.isEmpty(links) || CollectionUtils.isEmpty(linkId)) {
             return null;
@@ -242,9 +279,16 @@ public class EsCardSyncHelper {
                 linkNames.add(link.getLinkName());
             }
         }
-        return String.join(",", linkNames);
+        return String.join(CardSyncConstants.DISPLAY_NAME_SEPARATOR, linkNames);
     }
 
+    /**
+     * 构建分类名称展示文本。
+     *
+     * @param categories 分类持久化数据
+     * @param categoryId 分类 ID 列表
+     * @return 分类名称展示文本
+     */
     private String buildCategoryNames(List<DokkanCategoryPO> categories, List<Long> categoryId) {
         if (CollectionUtils.isEmpty(categories) || CollectionUtils.isEmpty(categoryId)) {
             return null;
@@ -259,6 +303,22 @@ public class EsCardSyncHelper {
                 categoryNames.add(category.getCategoryName());
             }
         }
-        return String.join(",", categoryNames);
+        return String.join(CardSyncConstants.DISPLAY_NAME_SEPARATOR, categoryNames);
+    }
+
+    /**
+     * 从同步数据 Map 中读取指定类型列表，集中收敛泛型转换告警。
+     *
+     * @param dataMap 同步数据 Map
+     * @param key     数据 key
+     * @param <T>     目标元素类型
+     * @return 指定类型列表，未提供时返回空列表
+     */
+    @SuppressWarnings("unchecked")
+    private <T> List<T> typedList(Map<String, List<?>> dataMap, String key) {
+        if (Objects.isNull(dataMap) || CollectionUtils.isEmpty(dataMap.get(key))) {
+            return List.of();
+        }
+        return (List<T>) dataMap.get(key);
     }
 }

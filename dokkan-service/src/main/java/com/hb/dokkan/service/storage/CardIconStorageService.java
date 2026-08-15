@@ -1,55 +1,45 @@
 package com.hb.dokkan.service.storage;
 
-import com.hb.dokkan.config.storage.MinioStorageProperties;
+import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import io.minio.BucketExistsArgs;
-import io.minio.MakeBucketArgs;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
-import io.minio.SetBucketPolicyArgs;
-import io.minio.StatObjectArgs;
-import io.minio.errors.ErrorResponseException;
+import com.hb.dokkan.config.storage.MinioStorageProperties;
+import com.hb.dokkan.service.storage.client.CardIconDownloadClient;
+import com.hb.dokkan.service.storage.client.MinioStorageClient;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.client.RestTemplate;
 
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Objects;
 
+/**
+ * @Description 卡片头像存储服务
+ * @Author stargazer
+ * @Date 2026/8/15 21:20
+ **/
 @Slf4j
 @Component
 public class CardIconStorageService {
 
-    private static final long DOKKAN_DB_CARD_ID_OFFSET = 1L;
-
-    private static final String SOURCE_URL_TEMPLATE =
-            "https://enaskhebnjtktdfszdcb.supabase.co/storage/v1/object/public/assets/character/thumb/"
-                    + "card_%d_thumb_folder/card_%d_thumb.png";
-
-    private static final String CONTENT_TYPE = MediaType.IMAGE_PNG_VALUE;
-
-    @Resource
-    private RestTemplate restTemplate;
-
-    @Resource
-    private MinioClient minioClient;
-
     @Resource
     private MinioStorageProperties minioStorageProperties;
 
+    @Resource
+    private CardIconDownloadClient cardIconDownloadClient;
+
+    @Resource
+    private MinioStorageClient minioStorageClient;
+
+    /** MinIO bucket 是否已完成初始化。 */
     private volatile boolean bucketReady = false;
 
+    /**
+     * 保存卡片头像并返回可访问 URL，MinIO 未启用时返回源站 URL。
+     *
+     * @param cardId 卡片 ID
+     * @return 头像 URL，下载失败时返回 null
+     */
     public String saveCardIcon(Long cardId) {
         if (cardId == null) {
             return null;
@@ -59,29 +49,37 @@ public class CardIconStorageService {
         }
         String objectName = buildObjectName(cardId);
         try {
+            // 先确保 bucket 可用，再判断对象是否已经存在，避免重复下载上传。
             ensureBucketReady();
-            if (!objectExists(objectName)) {
+            if (!minioStorageClient.objectExists(objectName)) {
                 Path iconPath = downloadCardIconToLocal(cardId);
                 if (iconPath == null) {
                     return null;
                 }
-                uploadCardIcon(objectName, iconPath);
+                minioStorageClient.uploadObject(objectName, iconPath);
             }
             return buildPublicUrl(objectName);
         } catch (Exception e) {
-            log.error("save card icon failed, cardId:{}, message:{}", cardId, e.getMessage(), e);
+            log.error("save card icon failed, cardId={}, message={}", cardId, e.getMessage(), e);
             throw new DokkanBizException("save card icon failed, cardId:" + cardId + ", message:" + e.getMessage());
         }
     }
 
+    /**
+     * 下载卡片头像到本地缓存，缓存已存在时直接复用。
+     *
+     * @param cardId 卡片 ID
+     * @return 本地头像路径，下载失败时返回 null
+     * @throws Exception 本地文件写入失败时抛出
+     */
     private Path downloadCardIconToLocal(Long cardId) throws Exception {
         Path iconPath = buildLocalIconPath(cardId);
         if (Files.exists(iconPath) && Files.size(iconPath) > 0) {
             return iconPath;
         }
-        byte[] iconBytes = downloadCardIcon(cardId);
-        if (iconBytes == null || iconBytes.length == 0) {
-            log.warn("download card icon empty, cardId:{}", cardId);
+        byte[] iconBytes = cardIconDownloadClient.download(cardId, buildSourceUrl(cardId));
+        if (cardIconDownloadClient.isEmpty(iconBytes)) {
+            log.warn("download card icon empty, cardId={}", cardId);
             return null;
         }
         Files.createDirectories(iconPath.getParent());
@@ -89,54 +87,11 @@ public class CardIconStorageService {
         return iconPath;
     }
 
-    private byte[] downloadCardIcon(Long cardId) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set(HttpHeaders.USER_AGENT, "dokkan-web/1.0");
-        headers.setAccept(List.of(MediaType.IMAGE_PNG, MediaType.APPLICATION_OCTET_STREAM));
-        ResponseEntity<byte[]> response;
-        try {
-            response = restTemplate.exchange(
-                    buildSourceUrl(cardId),
-                    HttpMethod.GET,
-                    new HttpEntity<>(headers),
-                    byte[].class);
-        } catch (RestClientResponseException e) {
-            log.warn("download card icon failed, cardId:{}, status:{}", cardId, e.getStatusCode());
-            return null;
-        }
-        if (!response.getStatusCode().is2xxSuccessful()) {
-            log.warn("download card icon failed, cardId:{}, status:{}", cardId, response.getStatusCode());
-            return null;
-        }
-        return response.getBody();
-    }
-
-    private void uploadCardIcon(String objectName, Path iconPath) throws Exception {
-        try (InputStream inputStream = Files.newInputStream(iconPath)) {
-            minioClient.putObject(PutObjectArgs.builder()
-                    .bucket(minioStorageProperties.getBucket())
-                    .object(objectName)
-                    .stream(inputStream, Files.size(iconPath), -1)
-                    .contentType(CONTENT_TYPE)
-                    .build());
-        }
-    }
-
-    private boolean objectExists(String objectName) throws Exception {
-        try {
-            minioClient.statObject(StatObjectArgs.builder()
-                    .bucket(minioStorageProperties.getBucket())
-                    .object(objectName)
-                    .build());
-            return true;
-        } catch (ErrorResponseException e) {
-            if (Objects.nonNull(e.errorResponse()) && "NoSuchKey".equals(e.errorResponse().code())) {
-                return false;
-            }
-            throw e;
-        }
-    }
-
+    /**
+     * 确保 MinIO bucket 已创建并设置公开读策略。
+     *
+     * @throws Exception bucket 初始化失败时抛出
+     */
     private void ensureBucketReady() throws Exception {
         if (bucketReady) {
             return;
@@ -145,68 +100,75 @@ public class CardIconStorageService {
             if (bucketReady) {
                 return;
             }
-            String bucket = minioStorageProperties.getBucket();
-            boolean exists = minioClient.bucketExists(BucketExistsArgs.builder()
-                    .bucket(bucket)
-                    .build());
-            if (!exists) {
-                minioClient.makeBucket(MakeBucketArgs.builder()
-                        .bucket(bucket)
-                        .build());
-            }
-            minioClient.setBucketPolicy(SetBucketPolicyArgs.builder()
-                    .bucket(bucket)
-                    .config(buildPublicReadPolicy(bucket))
-                    .build());
+            minioStorageClient.ensureBucketReady();
             bucketReady = true;
         }
     }
 
+    /**
+     * 构建对象存储中的头像对象名称。
+     *
+     * @param cardId 卡片 ID
+     * @return 对象名称
+     */
     private String buildObjectName(Long cardId) {
-        String prefix = StringUtils.stripEnd(minioStorageProperties.getCardIconPrefix(), "/");
-        return prefix + "/db/" + cardId + ".png";
+        String prefix = StringUtils.stripEnd(minioStorageProperties.getCardIconPrefix(),
+                CardSyncConstants.PATH_SEPARATOR);
+        return prefix + CardSyncConstants.PATH_SEPARATOR + CardSyncConstants.CARD_ICON_DB_DIRECTORY
+                + CardSyncConstants.PATH_SEPARATOR + cardId + CardSyncConstants.CARD_ICON_FILE_SUFFIX;
     }
 
+    /**
+     * 构建本地头像缓存路径。
+     *
+     * @param cardId 卡片 ID
+     * @return 本地缓存路径
+     */
     private Path buildLocalIconPath(Long cardId) {
-        return Path.of(minioStorageProperties.getCardIconCacheDir(), "db", cardId + ".png");
+        return Path.of(minioStorageProperties.getCardIconCacheDir(), CardSyncConstants.CARD_ICON_DB_DIRECTORY,
+                cardId + CardSyncConstants.CARD_ICON_FILE_SUFFIX);
     }
 
+    /**
+     * 构建卡片头像源站 URL。
+     *
+     * @param cardId 卡片 ID
+     * @return 源站 URL
+     */
     private String buildSourceUrl(Long cardId) {
-        long dokkanDbCardId = cardId - DOKKAN_DB_CARD_ID_OFFSET;
-        return String.format(SOURCE_URL_TEMPLATE, dokkanDbCardId, dokkanDbCardId);
+        long dokkanDbCardId = cardId - CardSyncConstants.DOKKAN_DB_CARD_ID_OFFSET;
+        return String.format(CardSyncConstants.CARD_ICON_SOURCE_URL_TEMPLATE, dokkanDbCardId, dokkanDbCardId);
     }
 
+    /**
+     * 构建 MinIO 公开访问 URL。
+     *
+     * @param objectName 对象名称
+     * @return 公开访问 URL
+     */
     private String buildPublicUrl(String objectName) {
         String publicEndpoint = StringUtils.defaultIfBlank(
                 minioStorageProperties.getPublicEndpoint(),
                 minioStorageProperties.getEndpoint());
-        return StringUtils.stripEnd(normalizeEndpoint(publicEndpoint), "/")
-                + "/" + minioStorageProperties.getBucket() + "/" + objectName;
+        return StringUtils.stripEnd(normalizeEndpoint(publicEndpoint), CardSyncConstants.PATH_SEPARATOR)
+                + CardSyncConstants.PATH_SEPARATOR + minioStorageProperties.getBucket()
+                + CardSyncConstants.PATH_SEPARATOR + objectName;
     }
 
+    /**
+     * 规范化 MinIO 访问端点，未带协议时默认补充 http。
+     *
+     * @param endpoint 原始端点
+     * @return 规范化端点
+     */
     private String normalizeEndpoint(String endpoint) {
         if (StringUtils.isBlank(endpoint)) {
             return endpoint;
         }
-        if (StringUtils.startsWithAny(endpoint, "http://", "https://")) {
+        if (StringUtils.startsWithAny(endpoint,
+                CardSyncConstants.HTTP_PROTOCOL_PREFIX, CardSyncConstants.HTTPS_PROTOCOL_PREFIX)) {
             return endpoint;
         }
-        return "http://" + endpoint;
-    }
-
-    private String buildPublicReadPolicy(String bucket) {
-        return """
-                {
-                  "Version": "2012-10-17",
-                  "Statement": [
-                    {
-                      "Effect": "Allow",
-                      "Principal": "*",
-                      "Action": ["s3:GetObject"],
-                      "Resource": ["arn:aws:s3:::%s/*"]
-                    }
-                  ]
-                }
-                """.formatted(bucket);
+        return CardSyncConstants.HTTP_PROTOCOL_PREFIX + endpoint;
     }
 }
