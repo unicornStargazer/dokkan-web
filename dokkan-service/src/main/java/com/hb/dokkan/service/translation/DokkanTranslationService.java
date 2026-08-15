@@ -2,23 +2,17 @@ package com.hb.dokkan.service.translation;
 
 import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
-import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.common.utils.TranslationUtils;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
-import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
-import com.hb.dokkan.service.translation.client.DokkanDbTerminologyClient;
 import com.hb.dokkan.service.translation.client.GoogleTranslationClient;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
-import java.io.FileNotFoundException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -51,10 +45,7 @@ public class DokkanTranslationService {
     /** 翻译缓存，key 为原文，value 为简体中文翻译。 */
     private final Map<String, String> cache = new ConcurrentHashMap<>();
 
-    /** 自定义术语表，来源于配置文件。 */
-    private final Map<String, String> customGlossary = new ConcurrentHashMap<>();
-
-    /** 运行期领域术语表，来源于数据库和 DokkanDB 外部接口。 */
+    /** 运行期领域术语表，来源于本地分类数据库。 */
     private final Map<String, String> domainGlossary = new ConcurrentHashMap<>();
 
     /** 缓存写入锁，避免并发持久化互相覆盖。 */
@@ -67,28 +58,19 @@ public class DokkanTranslationService {
     private volatile boolean domainGlossaryLoaded;
 
     @Resource
-    private ResourceLoader resourceLoader;
-
-    @Resource
     private DokkanCategoryRepository categoryRepository;
-
-    @Resource
-    private DokkanLinkRepository linkRepository;
 
     @Resource
     private GoogleTranslationClient googleTranslationClient;
 
     @Resource
-    private DokkanDbTerminologyClient dokkanDbTerminologyClient;
+    private TranslationMappingService translationMappingService;
 
     @Value("${dokkan.translation.enabled:true}")
     private boolean enabled;
 
     @Value("${dokkan.translation.cache-file:./data/dokkan-translation-cache.json}")
     private String cacheFile;
-
-    @Value("${dokkan.translation.glossary-file:classpath:dokkan-translation-glossary.json}")
-    private String glossaryFile;
 
     /**
      * 初始化翻译服务，加载自定义词表和本地缓存。
@@ -138,7 +120,7 @@ public class DokkanTranslationService {
             return sources;
         }
 
-        // 先预热领域术语，保障分类、链接等固定名称翻译稳定。
+        // 先预热领域术语，保障分类等固定名称翻译稳定。
         ensureDomainGlossary();
         // 找出既不是可信术语、也未命中缓存的文本，避免重复请求远程翻译。
         List<String> missing = sources.stream()
@@ -158,17 +140,33 @@ public class DokkanTranslationService {
     }
 
     /**
-     * 加载自定义术语表，失败时降级为空词表并继续翻译主链路。
+     * 强制重新翻译文本，重新加载本地分类术语并移除命中的旧翻译缓存。
+     *
+     * @param sourceTexts 待重新翻译文本集合
+     * @return 与入参顺序一致的翻译结果列表
      */
-    private void loadCustomGlossary() {
-        try (InputStream input = resourceLoader.getResource(glossaryFile).getInputStream()) {
-            Map<String, String> values = JsonUtils.inputStream2Map(input, String.class, String.class);
-            values.forEach(this::putCustomTerm);
-            log.info("Dokkan translation glossary loaded, location={}, size={}", glossaryFile, customGlossary.size());
-        } catch (FileNotFoundException e) {
-            log.info("Dokkan translation glossary does not exist, location={}", glossaryFile);
+    public List<String> retranslateAll(Collection<String> sourceTexts) {
+        if (Objects.isNull(sourceTexts)) {
+            return Collections.emptyList();
+        }
+        List<String> sources = new ArrayList<>(sourceTexts);
+        refreshCategoryDomainGlossary();
+        sources.stream()
+                .filter(StringUtils::isNotBlank)
+                .forEach(cache::remove);
+        return translateAll(sources);
+    }
+
+    /**
+     * 加载数据库自定义术语表，失败时降级为空词表并继续翻译主链路。
+     */
+    public synchronized void loadCustomGlossary() {
+        try {
+            translationMappingService.refreshMappingCache();
+            log.info("Dokkan translation mapping glossary loaded, size={}",
+                    translationMappingService.listEnabledMappingMap().size());
         } catch (Exception e) {
-            log.warn("Failed to load Dokkan translation glossary, location={}", glossaryFile, e);
+            log.warn("Failed to load Dokkan translation mapping glossary", e);
         }
     }
 
@@ -221,20 +219,10 @@ public class DokkanTranslationService {
             return;
         }
         try {
-            // 先读取本地已翻译分类和链接名称，作为 DokkanDB 原文名称的目标翻译。
-            Map<Long, String> categoryNames = categoryRepository.list().stream()
-                    .filter(row -> Objects.nonNull(row.getCategoryId()) && StringUtils.isNotBlank(row.getCategoryName()))
-                    .collect(Collectors.toMap(DokkanCategoryPO::getCategoryId, DokkanCategoryPO::getCategoryName,
-                            (left, right) -> left));
-            Map<Long, String> linkNames = linkRepository.list().stream()
-                    .filter(row -> Objects.nonNull(row.getLinkId()) && StringUtils.isNotBlank(row.getLinkName()))
-                    .collect(Collectors.toMap(DokkanLinkPO::getLinkId, DokkanLinkPO::getLinkName,
-                            (left, right) -> left));
-            // 再调用 DokkanDB Client 获取原文术语，Client 内部负责异常和空列表兜底。
-            registerNamedEntries(dokkanDbTerminologyClient.listJpCategories(), categoryNames);
-            registerNamedEntries(dokkanDbTerminologyClient.listGlobalCategories(), categoryNames);
-            registerNamedEntries(dokkanDbTerminologyClient.listJpLinks(), linkNames);
-            registerNamedEntries(dokkanDbTerminologyClient.listGlobalLinks(), linkNames);
+            // 技能描述里主要出现分类名，直接使用本地分类表的英文名和中文名构建术语映射，避免翻译时再查外部接口。
+            categoryRepository.list().stream()
+                    .filter(row -> StringUtils.isNoneBlank(row.getCategoryNameEn(), row.getCategoryName()))
+                    .forEach(row -> registerTrustedTerm(row.getCategoryNameEn(), row.getCategoryName()));
             domainGlossaryLoaded = true;
             log.info("Dokkan database translation memory loaded, terms={}", domainGlossary.size());
         } catch (Exception e) {
@@ -245,17 +233,12 @@ public class DokkanTranslationService {
     }
 
     /**
-     * 将 DokkanDB 原文条目与本地中文名称绑定为可信术语。
-     *
-     * @param entries        DokkanDB 原文条目
-     * @param localizedNames 本地中文名称 Map
+     * 刷新本地分类领域术语表。
      */
-    private void registerNamedEntries(List<DokkanDbTerminologyClient.NamedEntry> entries, Map<Long, String> localizedNames) {
-        for (DokkanDbTerminologyClient.NamedEntry entry : entries) {
-            if (Objects.nonNull(entry)) {
-                registerTrustedTerm(entry.name(), localizedNames.get(entry.id()));
-            }
-        }
+    public synchronized void refreshCategoryDomainGlossary() {
+        domainGlossaryLoaded = false;
+        domainGlossary.clear();
+        ensureDomainGlossary();
     }
 
     /**
@@ -265,7 +248,7 @@ public class DokkanTranslationService {
      * @return 可信翻译，不存在时返回 null
      */
     private String trustedTranslation(String source) {
-        String value = customGlossary.get(source);
+        String value = translationMappingService.listEnabledMappingMap().get(source);
         if (Objects.nonNull(value)) {
             return value;
         }
@@ -569,22 +552,8 @@ public class DokkanTranslationService {
     private Map<String, String> glossarySnapshot() {
         Map<String, String> result = new LinkedHashMap<>(TranslationConstants.DEFAULT_TERM_GLOSSARY);
         result.putAll(domainGlossary);
-        result.putAll(customGlossary);
+        result.putAll(translationMappingService.listEnabledMappingMap());
         return result;
-    }
-
-    /**
-     * 写入自定义术语，并清理同源缓存。
-     *
-     * @param source 原文术语
-     * @param target 中文术语
-     */
-    private void putCustomTerm(String source, String target) {
-        if (StringUtils.isAnyBlank(source, target)) {
-            return;
-        }
-        customGlossary.put(source, TranslationUtils.toSimpleChineseText(target));
-        cache.remove(source);
     }
 
     /**
@@ -594,7 +563,7 @@ public class DokkanTranslationService {
      */
     private int glossaryHash() {
         return TranslationConstants.GLOSSARY_HASH_BASE * TranslationConstants.DEFAULT_TERM_GLOSSARY.hashCode()
-                + customGlossary.hashCode();
+                + translationMappingService.listEnabledMappingMap().hashCode();
     }
 
     /**

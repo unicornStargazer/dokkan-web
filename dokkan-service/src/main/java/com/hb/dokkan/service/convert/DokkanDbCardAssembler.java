@@ -13,7 +13,7 @@ import com.hb.dokkan.common.domain.dto.data.wiki.WikiEzaCardDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiSkillDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiSpecialAttackDTO;
 import com.hb.dokkan.common.utils.DateUtils;
-import com.hb.dokkan.service.translation.DokkanTranslationService;
+import com.hb.dokkan.service.translation.DokkanLlmTranslationService;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -37,7 +37,7 @@ import java.util.function.Function;
 public class DokkanDbCardAssembler {
 
     @Resource
-    private DokkanTranslationService translationService;
+    private DokkanLlmTranslationService llmTranslationService;
 
     /**
      * 将 DokkanDB 卡片和数值响应转换为现有 wiki 持久化模型。
@@ -47,8 +47,20 @@ public class DokkanDbCardAssembler {
      * @return wiki 卡片模型
      */
     public WikiCardDTO assemble(DokkanDbCardDTO source, DokkanDbCardStatsDTO stats) {
-        // 先批量翻译当前卡片涉及的文本，避免字段转换时重复请求翻译服务。
-        Function<String, String> translate = translatorFor(source);
+        return assemble(source, stats, false);
+    }
+
+    /**
+     * 将 DokkanDB 卡片和数值响应转换为现有 wiki 持久化模型。
+     *
+     * @param source           DokkanDB 卡片响应
+     * @param stats            DokkanDB 卡片数值响应
+     * @param forceRetranslate 是否强制绕过旧翻译缓存重新翻译
+     * @return wiki 卡片模型
+     */
+    public WikiCardDTO assemble(DokkanDbCardDTO source, DokkanDbCardStatsDTO stats, boolean forceRetranslate) {
+        // 卡片文本统一走 LLM 模板翻译链路，避免普通翻译缓存影响译文质量。
+        Function<String, String> translate = translatorFor(source, forceRetranslate);
         // 组装基础卡片信息，保持现有 wiki 持久化结构不变。
         WikiCardBaseInfoDTO card = new WikiCardBaseInfoDTO();
         card.setId(source.getId());
@@ -90,12 +102,13 @@ public class DokkanDbCardAssembler {
     }
 
     /**
-     * 为当前卡片构建批量翻译函数。
+     * 为当前卡片构建 LLM 批量翻译函数。
      *
-     * @param card DokkanDB 卡片响应
+     * @param card             DokkanDB 卡片响应
+     * @param forceRetranslate 是否强制使用当前 LLM 链路重新翻译
      * @return 文本翻译函数
      */
-    private Function<String, String> translatorFor(DokkanDbCardDTO card) {
+    private Function<String, String> translatorFor(DokkanDbCardDTO card, boolean forceRetranslate) {
         List<String> texts = new ArrayList<>();
         add(texts, card.getName(), card.getTitle(), card.getLeaderSkill(), card.getPassiveSkillName(),
                 card.getPassiveSkillDescription(), card.getActiveSkillName(), card.getActiveSkillEffect(),
@@ -105,7 +118,8 @@ public class DokkanDbCardAssembler {
                 card.getEzaPassiveSkillNamePre(), card.getEzaPassiveSkillDescriptionPre());
         addAll(texts, card.getSpecialNames(), card.getSpecialDescriptions(), card.getFinishSkillNames(),
                 card.getFinishSkillEffects(), card.getFinishSkillConditions(), card.getTransformationNames());
-        List<String> translated = translationService.translateAll(texts);
+        List<String> translated = forceRetranslate ? llmTranslationService.retranslateAll(texts)
+                : llmTranslationService.translateAll(texts);
         Map<String, String> values = new LinkedHashMap<>();
         for (int i = 0; i < texts.size(); i++) {
             values.put(texts.get(i), translated.get(i));

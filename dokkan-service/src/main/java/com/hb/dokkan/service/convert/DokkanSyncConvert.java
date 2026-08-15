@@ -119,7 +119,10 @@ public interface DokkanSyncConvert {
      */
     List<DokkanCategoryPO> convertToCategoryPO(List<WikiCategoryDTO> data);
 
-    @Mapping(target = "publishTime", qualifiedByName = "convertToDate" , source = "publishTime")
+    @Mappings({
+            @Mapping(target = "categoryNameEn", source = "categoryNameEn"),
+            @Mapping(target = "publishTime", qualifiedByName = "convertToDate", source = "publishTime")
+    })
     DokkanCategoryPO convertToCategoryPO(WikiCategoryDTO data);
     /**
      * 转换为日期

@@ -1,6 +1,5 @@
 package com.hb.dokkan.api.data;
 
-import com.hb.dokkan.common.constants.ApiPathConstants;
 import com.hb.dokkan.common.domain.request.cards.CardIdSyncRequest;
 import com.hb.dokkan.common.domain.request.data.SyncStartRequest;
 import com.hb.dokkan.common.domain.request.data.TranslationRequest;
@@ -21,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @Date 2025/6/2 21:38
  **/
 @RestController
-@RequestMapping(ApiPathConstants.DATA_ROOT)
+@RequestMapping("/data")
 public class DokkanDataApi {
 
     @Resource
@@ -32,7 +31,7 @@ public class DokkanDataApi {
      *
      * @return 同步响应
      */
-    @PostMapping(ApiPathConstants.INIT_CARD)
+    @PostMapping("/init-card")
     public DokkanResponse initCard() {
         return dataDelegate.initCard();
     }
@@ -42,7 +41,7 @@ public class DokkanDataApi {
      *
      * @return 同步响应
      */
-    @PostMapping(ApiPathConstants.SYNC_ES_CARD)
+    @PostMapping("/sync-es-card")
     public DokkanResponse syncEsCardData() {
         return dataDelegate.syncEsCardData();
     }
@@ -53,7 +52,7 @@ public class DokkanDataApi {
      * @param request 卡片 ID 同步请求
      * @return 同步数量响应
      */
-    @PostMapping(ApiPathConstants.SYNC_CARD_BY_IDS)
+    @PostMapping("/sync-card-by-ids")
     public DokkanResponse<Integer> syncCardByIds(@RequestBody CardIdSyncRequest request) {
         return dataDelegate.syncCardByIds(request);
     }
@@ -64,7 +63,7 @@ public class DokkanDataApi {
      * @param request 同步启动请求
      * @return 后台任务 ID 响应
      */
-    @PostMapping(ApiPathConstants.SYNC_START)
+    @PostMapping("/sync-start")
     public DokkanResponse<String> startSync(@RequestBody SyncStartRequest request) {
         return dataDelegate.startSync(request);
     }
@@ -75,7 +74,7 @@ public class DokkanDataApi {
      * @param jobId 后台任务 ID
      * @return 同步进度响应
      */
-    @GetMapping(ApiPathConstants.SYNC_PROGRESS)
+    @GetMapping("/sync-progress/{jobId}")
     public DokkanResponse<SyncProgressResponse> syncProgress(@PathVariable String jobId) {
         return dataDelegate.syncProgress(jobId);
     }
@@ -86,7 +85,7 @@ public class DokkanDataApi {
      * @param request 翻译请求
      * @return 翻译结果响应
      */
-    @PostMapping(ApiPathConstants.TRANSLATE)
+    @PostMapping("/translate")
     public DokkanResponse<String> translate(@RequestBody TranslationRequest request) {
         return dataDelegate.translate(request);
     }
@@ -97,7 +96,7 @@ public class DokkanDataApi {
      * @param request 翻译请求
      * @return 翻译结果响应
      */
-    @PostMapping(ApiPathConstants.TRANSLATE_LLM)
+    @PostMapping("/translate/llm")
     public DokkanResponse<String> translateByLlm(@RequestBody TranslationRequest request) {
         return dataDelegate.translateByLlm(request);
     }
@@ -107,7 +106,7 @@ public class DokkanDataApi {
      *
      * @return 初始化响应
      */
-    @PostMapping(ApiPathConstants.INIT_CATEGORY)
+    @PostMapping("/init-category")
     public DokkanResponse initCategories() {
         return dataDelegate.initCategories();
     }
@@ -117,7 +116,7 @@ public class DokkanDataApi {
      *
      * @return 初始化响应
      */
-    @PostMapping(ApiPathConstants.INIT_LINK)
+    @PostMapping("/init-link")
     public DokkanResponse initLinks() {
         return dataDelegate.initLinks();
     }
@@ -128,7 +127,7 @@ public class DokkanDataApi {
      * @param fixType 修复类型
      * @return 修复响应
      */
-    @GetMapping(ApiPathConstants.FIX_DB_DATA)
+    @GetMapping("/fix-db-data/{fixType}")
     public DokkanResponse fixDbData(@PathVariable("fixType") Integer fixType) {
         return dataDelegate.fixDbData(fixType);
     }

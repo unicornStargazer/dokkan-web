@@ -44,42 +44,46 @@ public class DokkanDbFacade {
     private DokkanDbClient dokkanDbClient;
 
     /**
-     * 获取最近卡片目录，Global 优先，空结果时降级 JP。
+     * 获取英文版最近卡片目录。
      *
      * @param size 查询数量
      * @return 最近卡片目录
      */
     public List<DokkanDbCardDTO> getRecentCatalog(int size) {
         return RetryTemplate.executeWithRetrySliently(() -> {
-            // Global 优先，失败或空结果时使用 JP 数据源兜底。
+            // 卡片主数据统一使用 Global 英文源，后续再走统一翻译链路。
             List<DokkanDbCardDTO> rows = dokkanDbClient.listRecentCatalogFromGlobal(size);
-            if (rows == null || rows.isEmpty()) {
-                rows = dokkanDbClient.listRecentCatalogFromJp(size);
-            }
             return rows == null ? Collections.emptyList() : rows;
         }, httpPoolProperties.getRetry(), "getDokkanDbRecentCatalog");
     }
 
     /**
-     * 获取单张卡片详情并转换为 wiki 持久化模型。
+     * 获取英文版单张卡片详情并转换为 wiki 持久化模型。
      *
      * @param cardId 卡片 ID
      * @return wiki 卡片模型，查不到时返回 null
      */
     public WikiCardDTO getCard(Long cardId) {
+        return getCard(cardId, false);
+    }
+
+    /**
+     * 获取英文版单张卡片详情并转换为 wiki 持久化模型。
+     *
+     * @param cardId           卡片 ID
+     * @param forceRetranslate 是否强制绕过旧翻译缓存重新翻译
+     * @return wiki 卡片模型，查不到时返回 null
+     */
+    public WikiCardDTO getCard(Long cardId, boolean forceRetranslate) {
         return RetryTemplate.executeWithRetrySliently(() -> {
-            // 先查 Global，查不到再查 JP，并记录最终命中的数据源用于查询数值。
-            DokkanDbClient.Source selectedSource = DokkanDbClient.Source.GLOBAL;
+            // 卡片详情、被动、队长技等模板统一取 Global 英文源，避免新增卡走日文导致翻译质量不稳定。
             List<DokkanDbCardDTO> cards = dokkanDbClient.listCardsFromGlobal(cardId);
-            if (cards == null || cards.isEmpty()) {
-                selectedSource = DokkanDbClient.Source.JP;
-                cards = dokkanDbClient.listCardsFromJp(cardId);
-            }
             if (cards == null || cards.isEmpty()) {
                 return null;
             }
-            List<DokkanDbCardStatsDTO> stats = dokkanDbClient.listCardStats(selectedSource, cardId);
-            return assembler.assemble(cards.getFirst(), stats == null || stats.isEmpty() ? null : stats.getFirst());
+            List<DokkanDbCardStatsDTO> stats = dokkanDbClient.listCardStats(DokkanDbClient.Source.GLOBAL, cardId);
+            return assembler.assemble(cards.getFirst(), stats == null || stats.isEmpty() ? null : stats.getFirst(),
+                    forceRetranslate);
         }, httpPoolProperties.getRetry(), "getDokkanDbCard-cardId:" + cardId);
     }
 
@@ -97,34 +101,32 @@ public class DokkanDbFacade {
     }
 
     /**
-     * 获取分类列表并翻译分类名称。
+     * 获取英文版分类列表并翻译分类名称。
      *
      * @return 分类列表
      */
     public List<WikiCategoryDTO> getCategories() {
+        // 分类名称统一使用 Global 英文源，保证术语进入翻译链路前语言一致。
         List<WikiCategoryDTO> rows = dokkanDbClient.listCategoriesFromGlobal();
-        if (rows.isEmpty()) {
-            rows = dokkanDbClient.listCategoriesFromJp();
-        }
         List<String> translated = translationService.translateAll(rows.stream()
                 .map(WikiCategoryDTO::getCategoryName)
                 .toList());
         for (int i = 0; i < rows.size(); i++) {
+            String englishName = rows.get(i).getCategoryName();
             rows.get(i).setCategoryName(translated.get(i));
+            rows.get(i).setCategoryNameEn(englishName);
         }
         return rows;
     }
 
     /**
-     * 获取链接列表并翻译链接名称与效果描述。
+     * 获取英文版链接列表并翻译链接名称与效果描述。
      *
      * @return 链接列表
      */
     public List<WikiLinkDTO> getLinks() {
+        // 链接名称和效果统一使用 Global 英文源，便于按卡牌模板翻译为中文。
         List<WikiLinkDTO> rows = dokkanDbClient.listLinksFromGlobal();
-        if (rows.isEmpty()) {
-            rows = dokkanDbClient.listLinksFromJp();
-        }
         Map<Long, DokkanDbClient.LinkEffect> effects = dokkanDbClient.listLinkEffects(
                         rows.stream().map(WikiLinkDTO::getLinkId).toList())
                 .stream()

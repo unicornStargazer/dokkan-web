@@ -22,6 +22,12 @@ public enum ExceptionErrorCode {
 
     QUERY_PARAM_ERROR("980814", "查询参数错误"),
 
+    CATEGORY_PARAM_ERROR("980815", CategoryConstants.CATEGORY_SAVE_PARAM_ERROR_MESSAGE),
+
+    CATEGORY_DUPLICATE("980816", CategoryConstants.CATEGORY_ID_DUPLICATE_ERROR_MESSAGE),
+
+    CATEGORY_NOT_FOUND("980817", CategoryConstants.CATEGORY_NOT_FOUND_ERROR_MESSAGE),
+
     ;
 
     private final String errorCode;

@@ -1,8 +1,10 @@
 package com.hb.dokkan.service;
 
+import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
 import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
+import com.hb.dokkan.common.domain.request.cards.CardRetranslateRequest;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.domain.response.base.PageResponse;
 import com.hb.dokkan.common.domain.response.cards.CardDetailResponse;
@@ -56,6 +58,24 @@ public class DokkanCardDelegate {
                 .build();
         return DokkanResponse.<PageResponse<CardListResponse>>builder()
                 .withModel(pageResponse)
+                .success();
+    }
+
+    /**
+     * 重新翻译单张卡片，负责参数校验、请求转换和响应封装。
+     *
+     * @param request 单卡重新翻译请求
+     * @return 最新卡片详情响应
+     */
+    public DokkanResponse<CardDetailResponse> retranslate(CardRetranslateRequest request) {
+        if (Objects.isNull(request) || Objects.isNull(request.getCardId())
+                || request.getCardId() <= CardSyncConstants.MIN_VALID_CARD_ID) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
+        CardDetailVO cardDetailVO = cardService.retranslateCard(request.getCardId());
+        CardDetailResponse response = dokkanCardConvert.detailVoToResponse(cardDetailVO);
+        return DokkanResponse.<CardDetailResponse>builder()
+                .withModel(response)
                 .success();
     }
 

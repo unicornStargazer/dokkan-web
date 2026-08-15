@@ -18,7 +18,7 @@ public final class TranslationConstants {
     public static final String TRANSLATION_TEXT_ERROR_MESSAGE = "text must contain 1 to 10000 characters";
 
     /** 普通翻译缓存格式版本，变更缓存结构或核心词表时递增。 */
-    public static final int CACHE_FORMAT_VERSION = 3;
+    public static final int CACHE_FORMAT_VERSION = 4;
 
     /** 翻译词表哈希基数，保持旧缓存哈希算法稳定。 */
     public static final int GLOSSARY_HASH_BASE = 31;
@@ -164,6 +164,18 @@ public final class TranslationConstants {
     /** LLM 请求失败时的错误提示前缀。 */
     public static final String LLM_REQUEST_FAILED_MESSAGE_PREFIX = "LLM translation request failed: ";
 
+    /** LLM system prompt 与动态术语表之间的分隔符。 */
+    public static final String LLM_PROMPT_SECTION_SEPARATOR = "\n\n";
+
+    /** LLM 动态术语表标题，提示模型优先使用本地已有映射。 */
+    public static final String LLM_DYNAMIC_GLOSSARY_TITLE = "Runtime Dokkan proper-noun glossary. Use these exact translations when they appear in Leader Skill, Passive Skill, Active Skill, Super Attack, category, link or condition text:";
+
+    /** LLM 动态术语表条目格式。 */
+    public static final String LLM_DYNAMIC_GLOSSARY_ENTRY_FORMAT = "- %s = %s";
+
+    /** LLM 动态术语表最大条目数，避免 prompt 过长影响接口稳定性。 */
+    public static final int LLM_DYNAMIC_GLOSSARY_MAX_TERMS = 300;
+
     /** 卡片文本归一化正则：忽略大小写的 Ki 英文词。 */
     public static final String NORMALIZE_REGEX_KI_WORD = "(?i)\\bKi\\b";
 
@@ -283,8 +295,10 @@ public final class TranslationConstants {
         values.put("概率", "机率");
         values.put("大幅度提升", "大幅提升");
         values.put("闪避", "回避");
-        values.put("伤害减少率", "伤害减轻率");
-        values.put("伤害减免率", "伤害减轻率");
+        values.put("奋力一击", "会心一击");
+        values.put("暴击", "会心一击");
+        values.put("伤害减少率", "伤害减免率");
+        values.put("伤害减轻率", "伤害减免率");
         values.put("防范一切攻击", "防御所有攻击");
         values.put("类别类别", "类别");
         return Collections.unmodifiableMap(values);
@@ -297,7 +311,7 @@ public final class TranslationConstants {
      */
     private static Map<String, String> buildDefaultTermGlossary() {
         Map<String, String> terms = new LinkedHashMap<>();
-        terms.put("ダメージ軽減率", "伤害减轻率");
+        terms.put("ダメージ軽減率", "伤害减免率");
         terms.put("超高確率", "超高机率");
         terms.put("高確率", "高机率");
         terms.put("中確率", "中等机率");
@@ -322,12 +336,52 @@ public final class TranslationConstants {
         terms.put("虹気玉", "彩虹珠");
         terms.put("属性気玉", "属性气珠");
         terms.put("カテゴリ", "类别");
+        terms.put("Category", "类别");
+        terms.put("Type", "属性");
+        terms.put("Super Class", "超系");
+        terms.put("Extreme Class", "极系");
+        terms.put("Super AGL Type", "超速属性");
+        terms.put("Super TEQ Type", "超技属性");
+        terms.put("Super INT Type", "超知属性");
+        terms.put("Super STR Type", "超力属性");
+        terms.put("Super PHY Type", "超体属性");
+        terms.put("Extreme AGL Type", "极速属性");
+        terms.put("Extreme TEQ Type", "极技属性");
+        terms.put("Extreme INT Type", "极知属性");
+        terms.put("Extreme STR Type", "极力属性");
+        terms.put("Extreme PHY Type", "极体属性");
+        terms.put("AGL Type", "速属性");
+        terms.put("TEQ Type", "技属性");
+        terms.put("INT Type", "知属性");
+        terms.put("STR Type", "力属性");
+        terms.put("PHY Type", "体属性");
+        terms.put("Movie Heroes", "剧场版英雄");
+        terms.put("Movie Bosses", "剧场版BOSS");
+        terms.put("Pure Saiyans", "纯粹赛亚人");
+        terms.put("Hybrid Saiyans", "混血赛亚人");
+        terms.put("Realm of Gods", "神次元");
+        terms.put("Kamehameha", "龟派气功");
+        terms.put("Majin Buu Saga", "魔人布欧篇");
+        terms.put("Universe Survival Saga", "宇宙生存篇");
+        terms.put("Final Trump Card", "最后王牌");
+        terms.put("Transformation Boost", "变身强化");
+        terms.put("Bond of Parent and Child", "亲子羁绊");
+        terms.put("Joined Forces", "组合战士");
+        terms.put("Power of Wishes", "愿望之力");
+        terms.put("Battle of Fate", "命运之战");
+        terms.put("Earth-Bred Fighters", "地球培育的战士");
+        terms.put("Super Heroes", "超级英雄");
+        terms.put("Super Bosses", "超级BOSS");
         terms.put("ターン", "回合");
         terms.put("味方全員", "我方全体");
         terms.put("自身", "自身");
         terms.put("敵", "敌人");
         terms.put("回避率", "回避率");
-        terms.put("会心の一撃", "奋力一击");
+        terms.put("会心の一撃", "会心一击");
+        terms.put("critical hit", "会心一击");
+        terms.put("critical hits", "会心一击");
+        terms.put("damage reduction", "伤害减免率");
+        terms.put("damage reduction rate", "伤害减免率");
         terms.put("必ず追加攻撃", "必可发动追加攻击");
         terms.put("全属性に効果抜群で攻撃", "对全属性造成属性克制伤害");
         terms.put("全ての攻撃をガード", "防御所有攻击");

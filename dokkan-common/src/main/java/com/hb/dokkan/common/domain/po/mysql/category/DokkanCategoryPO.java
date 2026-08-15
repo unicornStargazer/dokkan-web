@@ -23,9 +23,14 @@ public class DokkanCategoryPO extends BasePO {
     private Long categoryId;
 
     /**
-     * 分类名称
+     * 中文分类名称
      */
     private String categoryName;
+
+    /**
+     * 英文分类名称，用于技能描述翻译时按本地分类表做术语映射。
+     */
+    private String categoryNameEn;
 
     /**
      * 发布时间

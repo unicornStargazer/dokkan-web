@@ -139,7 +139,7 @@ public class SyncDataService {
         }
         SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ARRANGE_CARD,
                 CardSyncConstants.STAGE_ARRANGE_CARD, CardSyncConstants.MESSAGE_FETCH_COMPLETE_ARRANGE);
-        persistCardData(cardData);
+        persistCardData(cardData, true);
         log.info("card incremental sync completed");
     }
 
@@ -150,6 +150,34 @@ public class SyncDataService {
      * @return 成功同步数量
      */
     public int syncCardsByIds(List<Long> cardIds) {
+        return syncCardsByIdsInternal(cardIds, true, false);
+    }
+
+    /**
+     * 按指定卡片 ID 强制重新翻译卡片数据。
+     *
+     * @param cardId 卡片 ID
+     * @return 成功同步数量
+     */
+    public int retranslateCardById(Long cardId) {
+        if (Objects.isNull(cardId) || cardId <= CardSyncConstants.MIN_VALID_CARD_ID) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
+        return syncCardsByIdsInternal(List.of(cardId), false, true);
+    }
+
+    /**
+     * 按指定卡片 ID 同步卡片数据。
+     *
+     * @param cardIds                 卡片 ID 列表
+     * @param preserveLocalizedFields 是否保留已有本地化文案
+     * @param forceRetranslate        是否绕过旧翻译缓存重新翻译
+     * @return 成功同步数量
+     */
+    private int syncCardsByIdsInternal(List<Long> cardIds, boolean preserveLocalizedFields, boolean forceRetranslate) {
+        if (CollectionUtils.isEmpty(cardIds)) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
         List<Long> distinctCardIds = cardIds.stream()
                 .filter(Objects::nonNull)
                 .filter(cardId -> cardId > CardSyncConstants.MIN_VALID_CARD_ID)
@@ -160,14 +188,18 @@ public class SyncDataService {
             throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
         }
 
-        log.info("manual card sync started, requestedCardIds:{}", distinctCardIds);
+        log.info("manual card sync started, requestedCardIds:{}, preserveLocalized:{}, forceRetranslate:{}",
+                distinctCardIds, preserveLocalizedFields, forceRetranslate);
         SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_MANUAL_FETCH_RUNNING,
                 CardSyncConstants.STAGE_FETCH_MANUAL_CARD_RUNNING,
                 CardSyncConstants.MESSAGE_FETCH_MANUAL_CARD_PREFIX + distinctCardIds.size()
                         + CardSyncConstants.MESSAGE_CARD_ID_SUFFIX);
 
         // 先按指定 ID 从 DokkanDB 查询原始数据，查不到时直接按业务异常返回。
-        List<WikiCardDTO> wikiCards = dokkanDbFacade.getCards(distinctCardIds);
+        List<WikiCardDTO> wikiCards = forceRetranslate ? distinctCardIds.stream()
+                .map(cardId -> dokkanDbFacade.getCard(cardId, true))
+                .filter(Objects::nonNull)
+                .toList() : dokkanDbFacade.getCards(distinctCardIds);
         if (CollectionUtils.isEmpty(wikiCards)) {
             throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
         }
@@ -180,16 +212,17 @@ public class SyncDataService {
         // 将外部数据转换为内部同步 BO 后复用统一持久化链路。
         WikiCardBO cardData = new WikiCardBO();
         wikiCardHelper.buildData(cardData, wikiCards);
-        return persistCardData(cardData);
+        return persistCardData(cardData, preserveLocalizedFields);
     }
 
     /**
      * 持久化卡片同步数据，并增量刷新对应 ES 文档。
      *
-     * @param cardData 卡片同步业务对象
+     * @param cardData                卡片同步业务对象
+     * @param preserveLocalizedFields 是否保留已有本地化文案
      * @return 同步卡片数量
      */
-    private int persistCardData(WikiCardBO cardData) {
+    private int persistCardData(WikiCardBO cardData, boolean preserveLocalizedFields) {
         if (Objects.isNull(cardData) || CollectionUtils.isEmpty(cardData.getCardBaseData())) {
             throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
         }
@@ -206,10 +239,10 @@ public class SyncDataService {
         Boolean mysqlSyncSucceeded = transactionTemplate.execute(status -> {
             try {
                 // MySQL 数据写入需要放在同一个事务内，避免卡片与关联信息不一致。
-                insertCardBaseInfo(cardData.getCardBaseData());
-                insertDownPullSkillInfo(cardData.getDownPullSkills());
-                insertEzaCardInfo(cardData.getEzaCardInfos());
-                insertSpecialInfo(cardData.getSpecialAttacks());
+                insertCardBaseInfo(cardData.getCardBaseData(), preserveLocalizedFields);
+                insertDownPullSkillInfo(cardData.getDownPullSkills(), preserveLocalizedFields);
+                insertEzaCardInfo(cardData.getEzaCardInfos(), preserveLocalizedFields);
+                insertSpecialInfo(cardData.getSpecialAttacks(), preserveLocalizedFields);
                 return true;
             } catch (Exception e) {
                 log.error("SyncDataService#persistCardData error :{}", e.getMessage(), e);
@@ -251,17 +284,35 @@ public class SyncDataService {
             try {
                 List<WikiCategoryDTO> data = distinctList(categoryData);
                 List<DokkanCategoryPO> incoming = convert.convertToCategoryPO(data);
-                Set<Long> existingIds = categoryRepository.list().stream()
-                        .map(DokkanCategoryPO::getCategoryId)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet());
-                List<DokkanCategoryPO> missing = incoming.stream()
-                        .filter(row -> row.getCategoryId() != null && !existingIds.contains(row.getCategoryId()))
-                        .toList();
+                Map<Long, DokkanCategoryPO> existingCategories = categoryRepository.list().stream()
+                        .filter(row -> Objects.nonNull(row.getCategoryId()))
+                        .collect(Collectors.toMap(DokkanCategoryPO::getCategoryId, Function.identity(),
+                                (left, right) -> left));
+                List<DokkanCategoryPO> missing = new ArrayList<>();
+                List<DokkanCategoryPO> updates = new ArrayList<>();
+                for (DokkanCategoryPO row : incoming) {
+                    if (Objects.isNull(row.getCategoryId())) {
+                        continue;
+                    }
+                    DokkanCategoryPO existing = existingCategories.get(row.getCategoryId());
+                    if (Objects.isNull(existing)) {
+                        missing.add(row);
+                        continue;
+                    }
+                    if (StringUtils.isNotBlank(row.getCategoryNameEn())
+                            && !Objects.equals(existing.getCategoryNameEn(), row.getCategoryNameEn())) {
+                        existing.setCategoryNameEn(row.getCategoryNameEn());
+                        updates.add(existing);
+                    }
+                }
                 if (!missing.isEmpty()) {
                     categoryRepository.saveBatch(missing);
                 }
-                log.info("DokkanDB category sync completed, fetched:{}, inserted:{}", data.size(), missing.size());
+                if (!updates.isEmpty()) {
+                    categoryRepository.updateBatchById(updates);
+                }
+                log.info("DokkanDB category sync completed, fetched:{}, inserted:{}, updated:{}", data.size(),
+                        missing.size(), updates.size());
             } catch (Exception e) {
                 log.error("SyncDataService#initCategories error :{}", e.getMessage(), e);
                 status.setRollbackOnly();
@@ -423,9 +474,10 @@ public class SyncDataService {
     /**
      * 写入必杀技数据，已有记录保留本地化字段。
      *
-     * @param specialAttacks 必杀技同步数据
+     * @param specialAttacks          必杀技同步数据
+     * @param preserveLocalizedFields 是否保留已有本地化文案
      */
-    private void insertSpecialInfo(List<SpecialAttackDTO> specialAttacks) {
+    private void insertSpecialInfo(List<SpecialAttackDTO> specialAttacks, boolean preserveLocalizedFields) {
         if (CollectionUtils.isEmpty(specialAttacks)) {
             return;
         }
@@ -441,10 +493,12 @@ public class SyncDataService {
                 return;
             }
             special.setId(existing.getId());
-            special.setDescription(existing.getDescription());
-            special.setSpecialCategoryName(existing.getSpecialCategoryName());
-            special.setSpecialBonus1(existing.getSpecialBonus1());
-            special.setSpecialBonus2(existing.getSpecialBonus2());
+            if (preserveLocalizedFields) {
+                special.setDescription(existing.getDescription());
+                special.setSpecialCategoryName(existing.getSpecialCategoryName());
+                special.setSpecialBonus1(existing.getSpecialBonus1());
+                special.setSpecialBonus2(existing.getSpecialBonus2());
+            }
         });
         saveOrUpdateByKnownId(specialRepository, specialPOS, CardSyncConstants.SPECIAL_SAVE_BATCH_SIZE);
     }
@@ -452,9 +506,10 @@ public class SyncDataService {
     /**
      * 写入极限数据，已有记录保留本地化字段。
      *
-     * @param ezaCardInfos 极限同步数据
+     * @param ezaCardInfos           极限同步数据
+     * @param preserveLocalizedFields 是否保留已有本地化文案
      */
-    private void insertEzaCardInfo(List<EzaCardInfoDTO> ezaCardInfos) {
+    private void insertEzaCardInfo(List<EzaCardInfoDTO> ezaCardInfos, boolean preserveLocalizedFields) {
         if (CollectionUtils.isEmpty(ezaCardInfos)) {
             return;
         }
@@ -470,10 +525,12 @@ public class SyncDataService {
                 return;
             }
             ezaCard.setId(existing.getId());
-            ezaCard.setCardName(existing.getCardName());
-            ezaCard.setTitle(existing.getTitle());
-            ezaCard.setLeaderSkill(existing.getLeaderSkill());
-            ezaCard.setPassiveSkillDesc(existing.getPassiveSkillDesc());
+            if (preserveLocalizedFields) {
+                ezaCard.setCardName(existing.getCardName());
+                ezaCard.setTitle(existing.getTitle());
+                ezaCard.setLeaderSkill(existing.getLeaderSkill());
+                ezaCard.setPassiveSkillDesc(existing.getPassiveSkillDesc());
+            }
             if (ezaCard.getCost() == null) {
                 ezaCard.setCost(existing.getCost());
             }
@@ -484,9 +541,10 @@ public class SyncDataService {
     /**
      * 写入下拉技能数据，已有记录保留本地化字段。
      *
-     * @param downPullSkills 下拉技能同步数据
+     * @param downPullSkills          下拉技能同步数据
+     * @param preserveLocalizedFields 是否保留已有本地化文案
      */
-    private void insertDownPullSkillInfo(List<SkillDTO> downPullSkills) {
+    private void insertDownPullSkillInfo(List<SkillDTO> downPullSkills, boolean preserveLocalizedFields) {
         List<SkillDTO> distinctList = distinctByKey(downPullSkills, SkillDTO::getSkillId);
         List<SkillPO> skillPOS = convert.wikiSkill2POList(distinctList);
         if (CollectionUtils.isEmpty(skillPOS)) {
@@ -502,10 +560,12 @@ public class SyncDataService {
                 return;
             }
             skill.setId(existing.getId());
-            skill.setName(existing.getName());
-            skill.setConditionDescription(existing.getConditionDescription());
-            skill.setEffectDescription(existing.getEffectDescription());
-            skill.setSpecialCategoryName(existing.getSpecialCategoryName());
+            if (preserveLocalizedFields) {
+                skill.setName(existing.getName());
+                skill.setConditionDescription(existing.getConditionDescription());
+                skill.setEffectDescription(existing.getEffectDescription());
+                skill.setSpecialCategoryName(existing.getSpecialCategoryName());
+            }
         });
         saveOrUpdateByKnownId(skillRepository, skillPOS, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
     }
@@ -513,9 +573,10 @@ public class SyncDataService {
     /**
      * 写入卡片基础数据，已有记录保留本地化字段。
      *
-     * @param cards 卡片基础同步数据
+     * @param cards                   卡片基础同步数据
+     * @param preserveLocalizedFields 是否保留已有本地化文案
      */
-    private void insertCardBaseInfo(List<CardBaseInfoDTO> cards) {
+    private void insertCardBaseInfo(List<CardBaseInfoDTO> cards, boolean preserveLocalizedFields) {
         List<CardBaseInfoDTO> distinctedList = distinctByKey(cards, CardBaseInfoDTO::getCardId);
         List<CardPO> cardModel = convert.wikiCard2POList(distinctedList);
         checkParam(cardModel);
@@ -526,7 +587,11 @@ public class SyncDataService {
         cardModel.forEach(card -> {
             CardPO existing = existingCards.get(card.getCardId());
             card.setId(existing == null ? null : existing.getId());
-            preserveExistingLocalizedFields(card, existing);
+            if (preserveLocalizedFields) {
+                preserveExistingLocalizedFields(card, existing);
+            } else if (existing != null && card.getCost() == null) {
+                card.setCost(existing.getCost());
+            }
         });
         saveOrUpdateByKnownId(cardRepository, cardModel, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
     }

@@ -27,6 +27,11 @@ public class WikiCategoryDTO implements Serializable {
     private String categoryName;
 
     /**
+     * 英文分类名称，用于同步到本地分类表后参与翻译术语映射。
+     */
+    private String categoryNameEn;
+
+    /**
      * 发布时间
      */
     @JsonProperty("open_at")

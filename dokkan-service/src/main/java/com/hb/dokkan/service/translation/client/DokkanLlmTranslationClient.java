@@ -26,14 +26,15 @@ public class DokkanLlmTranslationClient {
     /**
      * 调用 OpenAI 兼容聊天补全接口翻译文本，异常时记录日志并抛出明确错误。
      *
-     * @param source     待翻译文本
-     * @param properties LLM 翻译配置
+     * @param source       待翻译文本
+     * @param systemPrompt 本次翻译使用的 system prompt
+     * @param properties   LLM 翻译配置
      * @return 翻译后的文本
      */
-    public String translate(String source, LlmTranslationProperties properties) {
+    public String translate(String source, String systemPrompt, LlmTranslationProperties properties) {
         try {
             // 构造 OpenAI 兼容请求，外部接口字段只在 Client 内部出现。
-            Map<String, Object> request = buildRequest(source, properties);
+            Map<String, Object> request = buildRequest(source, systemPrompt, properties);
             String response = buildClient(properties)
                     .post()
                     .uri(properties.getChatCompletionsPath())
@@ -55,17 +56,18 @@ public class DokkanLlmTranslationClient {
     /**
      * 构建 OpenAI 兼容聊天补全请求体。
      *
-     * @param source     待翻译文本
-     * @param properties LLM 翻译配置
+     * @param source       待翻译文本
+     * @param systemPrompt 本次翻译使用的 system prompt
+     * @param properties   LLM 翻译配置
      * @return 请求体 Map
      */
-    private Map<String, Object> buildRequest(String source, LlmTranslationProperties properties) {
+    private Map<String, Object> buildRequest(String source, String systemPrompt, LlmTranslationProperties properties) {
         return Map.of(
                 TranslationConstants.LLM_REQUEST_FIELD_MODEL, properties.getModel(),
                 TranslationConstants.LLM_REQUEST_FIELD_TEMPERATURE, properties.getTemperature(),
                 TranslationConstants.LLM_REQUEST_FIELD_MESSAGES, List.of(
                         Map.of(TranslationConstants.LLM_REQUEST_FIELD_ROLE, TranslationConstants.LLM_ROLE_SYSTEM,
-                                TranslationConstants.LLM_REQUEST_FIELD_CONTENT, properties.getSystemPrompt()),
+                                TranslationConstants.LLM_REQUEST_FIELD_CONTENT, systemPrompt),
                         Map.of(TranslationConstants.LLM_REQUEST_FIELD_ROLE, TranslationConstants.LLM_ROLE_USER,
                                 TranslationConstants.LLM_REQUEST_FIELD_CONTENT, source)
                 )

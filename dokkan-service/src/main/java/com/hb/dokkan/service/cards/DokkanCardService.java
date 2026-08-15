@@ -17,6 +17,7 @@ import com.hb.dokkan.infrastructure.es.card.DokkanEsCardRepository;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
 import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
 import com.hb.dokkan.service.convert.DokkanCardConvert;
+import com.hb.dokkan.service.job.sync.SyncDataService;
 import jakarta.annotation.Resource;
 import org.dromara.easyes.core.biz.EsPageInfo;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,9 @@ public class DokkanCardService{
 
     @Resource
     private DokkanCardConvert cardConvert;
+
+    @Resource
+    private SyncDataService syncDataService;
 
 
     /**
@@ -91,6 +95,19 @@ public class DokkanCardService{
         cardQueryConditionDTO.setCategories(categories);
         cardQueryConditionDTO.setLinks(links);
         return cardQueryConditionDTO;
+    }
+
+    /**
+     * 重新翻译单张卡片，并返回最新卡片详情。
+     *
+     * @param cardId 卡片 ID
+     * @return 最新卡片详情
+     */
+    public CardDetailVO retranslateCard(Long cardId) {
+        syncDataService.retranslateCardById(cardId);
+        CardQueryOptionDTO queryOption = new CardQueryOptionDTO();
+        queryOption.setCardId(cardId);
+        return cardDetail(queryOption);
     }
 
     /**
