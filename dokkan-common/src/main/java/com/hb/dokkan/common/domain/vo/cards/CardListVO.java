@@ -51,6 +51,10 @@ public class CardListVO implements Serializable {
      */
     private Date publishTime;
 
+    /**
+     * 查询排序时间，EZA 卡优先使用最新极限发布时间。
+     */
+    private Date orderByTime;
 
     /**
      * 免费标志

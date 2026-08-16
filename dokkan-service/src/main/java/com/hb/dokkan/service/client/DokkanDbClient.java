@@ -42,7 +42,18 @@ public class DokkanDbClient {
      * @return 卡片目录列表
      */
     public List<DokkanDbCardDTO> listRecentCatalogFromGlobal(int size) {
-        return fetchCatalog(Source.GLOBAL, size);
+        return listRecentCatalogFromGlobal(CardSyncConstants.DOKKAN_DB_DEFAULT_CHUNK, size);
+    }
+
+    /**
+     * 查询 Global 站指定分片卡片目录，异常时返回空列表。
+     *
+     * @param chunk 目录分片序号
+     * @param size  查询数量
+     * @return 卡片目录列表
+     */
+    public List<DokkanDbCardDTO> listRecentCatalogFromGlobal(int chunk, int size) {
+        return fetchCatalog(Source.GLOBAL, chunk, size);
     }
 
     /**
@@ -52,7 +63,7 @@ public class DokkanDbClient {
      * @return 卡片目录列表
      */
     public List<DokkanDbCardDTO> listRecentCatalogFromJp(int size) {
-        return fetchCatalog(Source.JP, size);
+        return fetchCatalog(Source.JP, CardSyncConstants.DOKKAN_DB_DEFAULT_CHUNK, size);
     }
 
     /**
@@ -145,13 +156,13 @@ public class DokkanDbClient {
      * 查询最近卡片目录。
      *
      * @param source 数据源
+     * @param chunk  目录分片序号
      * @param size   查询数量
      * @return 卡片目录列表
      */
-    private List<DokkanDbCardDTO> fetchCatalog(Source source, int size) {
+    private List<DokkanDbCardDTO> fetchCatalog(Source source, int chunk, int size) {
         return fetchList(source, CardSyncConstants.DOKKAN_DB_CATALOG_PATH, DokkanDbCardDTO.class,
-                uri -> uri.queryParam(CardSyncConstants.DOKKAN_DB_QUERY_CHUNK,
-                                CardSyncConstants.DOKKAN_DB_DEFAULT_CHUNK)
+                uri -> uri.queryParam(CardSyncConstants.DOKKAN_DB_QUERY_CHUNK, chunk)
                         .queryParam(CardSyncConstants.DOKKAN_DB_QUERY_CHUNK_SIZE, size));
     }
 

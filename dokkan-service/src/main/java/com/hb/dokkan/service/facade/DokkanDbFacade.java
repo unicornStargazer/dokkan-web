@@ -14,8 +14,11 @@ import com.hb.dokkan.service.translation.DokkanTranslationService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,8 +55,21 @@ public class DokkanDbFacade {
     public List<DokkanDbCardDTO> getRecentCatalog(int size) {
         return RetryTemplate.executeWithRetrySliently(() -> {
             // 卡片主数据统一使用 Global 英文源，后续再走统一翻译链路。
-            List<DokkanDbCardDTO> rows = dokkanDbClient.listRecentCatalogFromGlobal(size);
-            return rows == null ? Collections.emptyList() : rows;
+            Map<Long, DokkanDbCardDTO> rows = new LinkedHashMap<>();
+            for (int chunk = CardSyncConstants.DOKKAN_DB_DEFAULT_CHUNK;
+                 chunk <= CardSyncConstants.DOKKAN_DB_CATALOG_MAX_CHUNK; chunk++) {
+                List<DokkanDbCardDTO> chunkRows = dokkanDbClient.listRecentCatalogFromGlobal(chunk, size);
+                if (CollectionUtils.isEmpty(chunkRows)) {
+                    break;
+                }
+                chunkRows.stream()
+                        .filter(row -> Objects.nonNull(row.getId()))
+                        .forEach(row -> rows.putIfAbsent(row.getId(), row));
+                if (chunkRows.size() < size) {
+                    break;
+                }
+            }
+            return new ArrayList<>(rows.values());
         }, httpPoolProperties.getRetry(), "getDokkanDbRecentCatalog");
     }
 

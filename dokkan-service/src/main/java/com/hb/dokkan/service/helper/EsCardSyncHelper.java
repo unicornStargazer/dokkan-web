@@ -3,6 +3,7 @@ package com.hb.dokkan.service.helper;
 import com.google.common.collect.Lists;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.EsCardAttributeKey;
+import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.domain.dto.cards.CardAttributeDTO;
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
@@ -86,6 +87,7 @@ public class EsCardSyncHelper {
             esCardPO.setDefValue(card.getDefValue());
             esCardPO.setAtkValue(card.getAtkValue());
             esCardPO.setPublishTime(card.getPublishTime());
+            esCardPO.setOrderByTime(card.getPublishTime());
             CardAttributeDTO attribute = JsonUtils.json2Object(card.getAttributes(), CardAttributeDTO.class);
 
             // 按卡片属性中的关联 ID 组装分类、链接、技能、必杀等 ES 展示字段。
@@ -201,30 +203,50 @@ public class EsCardSyncHelper {
             return;
         }
         esCardPO.setEzaFlag(true);
-        esCardPO.setSuperEzaFlag(currentEzaCards.size() > CardSyncConstants.SUPER_EZA_COUNT_THRESHOLD);
-        for (int i = 0; i < currentEzaCards.size(); i++) {
-            EzaCardPO ezaCardPO = currentEzaCards.get(i);
-            esCardPO.setEzaHpValue(ezaCardPO.getHpValue());
-            esCardPO.setEzaDefValue(ezaCardPO.getDefValue());
-            esCardPO.setEzaAtkValue(ezaCardPO.getAtkValue());
-            if (i == CardSyncConstants.EZA_BASE_INDEX) {
-                esCardPO.setEzaPublishTime(ezaCardPO.getPublishTime());
-                esCardPO.setEzaLeaderSkill(ezaCardPO.getLeaderSkill());
-                esCardPO.setEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
-            } else {
-                esCardPO.setSuperEzaPublishTime(ezaCardPO.getPublishTime());
-                esCardPO.setSuperEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
-            }
-        }
-        if (Objects.isNull(esCardPO.getPublishTime()) && Objects.isNull(esCardPO.getEzaPublishTime())
-                && Objects.isNull(esCardPO.getSuperEzaPublishTime())) {
-            return;
-        }
-        Date latestPublishTime = DateUtils.latestDate(esCardPO.getPublishTime(), esCardPO.getEzaPublishTime(),
+        esCardPO.setSuperEzaFlag(hasSuperEza(currentEzaCards));
+        currentEzaCards.stream()
+                .min(Comparator.comparing(EzaCardPO::getStep))
+                .ifPresent(ezaCardPO -> {
+                    esCardPO.setEzaPublishTime(ezaCardPO.getPublishTime());
+                    esCardPO.setEzaLeaderSkill(ezaCardPO.getLeaderSkill());
+                    esCardPO.setEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
+                });
+        currentEzaCards.stream()
+                .max(Comparator.comparing(EzaCardPO::getStep))
+                .ifPresent(ezaCardPO -> {
+                    esCardPO.setEzaHpValue(ezaCardPO.getHpValue());
+                    esCardPO.setEzaDefValue(ezaCardPO.getDefValue());
+                    esCardPO.setEzaAtkValue(ezaCardPO.getAtkValue());
+                    if (Boolean.TRUE.equals(esCardPO.getSuperEzaFlag())) {
+                        esCardPO.setSuperEzaPublishTime(ezaCardPO.getPublishTime());
+                        esCardPO.setSuperEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
+                    }
+                });
+        Date latestEzaPublishTime = currentEzaCards.stream()
+                .map(EzaCardPO::getPublishTime)
+                .filter(Objects::nonNull)
+                .max(Date::compareTo)
+                .orElse(null);
+        Date orderByTime = Objects.nonNull(latestEzaPublishTime)
+                ? latestEzaPublishTime : DateUtils.latestDate(esCardPO.getPublishTime(), esCardPO.getEzaPublishTime(),
                 esCardPO.getSuperEzaPublishTime());
-        if (Objects.nonNull(latestPublishTime)) {
-            esCardPO.setOrderByTime(latestPublishTime);
+        if (Objects.nonNull(orderByTime)) {
+            esCardPO.setOrderByTime(orderByTime);
         }
+    }
+
+    /**
+     * 判断卡片是否存在超极限阶段。
+     *
+     * @param currentEzaCards 当前卡片 EZA 持久化数据
+     * @return 是否存在超极限阶段
+     */
+    private boolean hasSuperEza(List<EzaCardPO> currentEzaCards) {
+        return currentEzaCards.size() > CardSyncConstants.SUPER_EZA_COUNT_THRESHOLD
+                || currentEzaCards.stream()
+                .map(EzaCardPO::getStep)
+                .filter(Objects::nonNull)
+                .anyMatch(step -> step >= TranslationConstants.EZA_PRE_STEP_THRESHOLD);
     }
 
     /**

@@ -558,15 +558,33 @@ public class SyncDataService {
             throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR, e);
         }
 
-        // 先构建新 ES 文档，再删除旧文档，避免构建失败导致旧数据被清空。
+        // 先构建新 ES 文档，再覆盖旧文档，避免构建失败导致旧数据被清空。
         List<CardEsPO> esCards = esCardSyncHelper.buildEsCardPO(dataMap);
         if (CollectionUtils.isEmpty(esCards)) {
-            log.info("incremental ES sync completed with no MySQL cards, deletedCardIds:{}", distinctCardIds);
+            log.info("incremental ES sync completed with no MySQL cards, requestedCardIds:{}", distinctCardIds);
             return 0;
         }
-        Integer insertCount = esCardMapper.insertBatch(esCards);
-        int syncedCount = insertCount == null ? 0 : insertCount;
-        log.info("incremental ES card sync completed, requestedCardIds:{}, syncedCount:{}", distinctCardIds, syncedCount);
+        List<String> documentIds = esCards.stream()
+                .map(CardEsPO::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        List<CardEsPO> existingEsCards = esCardMapper.selectBatchIds(documentIds);
+        Set<String> existingDocumentIds = CollectionUtils.isEmpty(existingEsCards) ? Set.of() : existingEsCards.stream()
+                .map(CardEsPO::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<CardEsPO> updateCards = esCards.stream()
+                .filter(card -> existingDocumentIds.contains(card.getId()))
+                .toList();
+        List<CardEsPO> insertCards = esCards.stream()
+                .filter(card -> !existingDocumentIds.contains(card.getId()))
+                .toList();
+        Integer updateCount = CollectionUtils.isEmpty(updateCards) ? 0 : esCardMapper.updateBatchByIds(updateCards);
+        Integer insertCount = CollectionUtils.isEmpty(insertCards) ? 0 : esCardMapper.insertBatch(insertCards);
+        int syncedCount = (updateCount == null ? 0 : updateCount) + (insertCount == null ? 0 : insertCount);
+        log.info("incremental ES card sync completed, requestedCardIds:{}, updatedCount:{}, insertedCount:{}",
+                distinctCardIds, updateCount, insertCount);
         return syncedCount;
     }
 

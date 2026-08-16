@@ -136,6 +136,12 @@ public final class CardSyncConstants {
     /** DokkanDB 目录默认首个分片。 */
     public static final int DOKKAN_DB_DEFAULT_CHUNK = 1;
 
+    /** DokkanDB 卡片目录同步分片大小。 */
+    public static final int DOKKAN_DB_CATALOG_CHUNK_SIZE = 500;
+
+    /** DokkanDB 卡片目录最多扫描分片数，避免外部接口异常导致无限轮询。 */
+    public static final int DOKKAN_DB_CATALOG_MAX_CHUNK = 20;
+
     /** 多 ID 查询分隔符。 */
     public static final String ID_JOIN_SEPARATOR = ",";
 
