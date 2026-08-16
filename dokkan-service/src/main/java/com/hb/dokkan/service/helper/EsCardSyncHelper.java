@@ -13,7 +13,6 @@ import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.common.utils.DateUtils;
 import com.hb.dokkan.common.utils.JsonUtils;
-import com.hb.dokkan.config.mybatis.IdGeneratorUtil;
 import com.hb.dokkan.service.convert.DokkanEsSyncConvert;
 import com.hb.dokkan.service.storage.CardIconStorageService;
 import jakarta.annotation.Resource;
@@ -74,7 +73,7 @@ public class EsCardSyncHelper {
         cards.forEach(card -> {
             CardEsPO esCardPO = new CardEsPO();
             esCards.add(esCardPO);
-            esCardPO.setId(IdGeneratorUtil.generate16CharUuidSimple());
+            esCardPO.setId(String.valueOf(card.getCardId()));
             esCardPO.setCardId(card.getCardId());
             esCardPO.setCardIcon(cardIconStorageService.saveCardIcon(card.getCardId()));
             esCardPO.setCardName(card.getCardName());

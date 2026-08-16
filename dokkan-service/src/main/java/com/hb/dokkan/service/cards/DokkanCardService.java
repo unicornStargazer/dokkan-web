@@ -111,6 +111,16 @@ public class DokkanCardService{
     }
 
     /**
+     * 批量重新翻译卡片。
+     *
+     * @param cardIds 卡片 ID 列表
+     * @return 成功重新翻译数量
+     */
+    public int retranslateCards(List<Long> cardIds) {
+        return syncDataService.retranslateCardsByIds(cardIds);
+    }
+
+    /**
      * 查询卡片详情
      */
     public CardDetailVO cardDetail(CardQueryOptionDTO queryOption) {

@@ -152,6 +152,42 @@ public final class TranslationConstants {
     /** LLM 响应 JSON 字段：消息对象。 */
     public static final String LLM_RESPONSE_FIELD_MESSAGE = "message";
 
+    /** LLM 响应 JSON 字段：token 用量对象。 */
+    public static final String LLM_RESPONSE_FIELD_USAGE = "usage";
+
+    /** LLM 响应 usage 字段：输入 prompt token 数。 */
+    public static final String LLM_RESPONSE_FIELD_PROMPT_TOKENS = "prompt_tokens";
+
+    /** LLM 响应 usage 字段：输出 completion token 数。 */
+    public static final String LLM_RESPONSE_FIELD_COMPLETION_TOKENS = "completion_tokens";
+
+    /** LLM 响应 usage 字段：总 token 数。 */
+    public static final String LLM_RESPONSE_FIELD_TOTAL_TOKENS = "total_tokens";
+
+    /** LLM 模型用量缓存 JSON 字段：模型用量明细。 */
+    public static final String LLM_USAGE_FIELD_MODELS = "models";
+
+    /** LLM 模型用量缓存 JSON 字段：已消耗 token 数。 */
+    public static final String LLM_USAGE_FIELD_USED_TOKENS = "usedTokens";
+
+    /** LLM 模型用量缓存 JSON 字段：累计 prompt token 数。 */
+    public static final String LLM_USAGE_FIELD_PROMPT_TOKENS = "promptTokens";
+
+    /** LLM 模型用量缓存 JSON 字段：累计 completion token 数。 */
+    public static final String LLM_USAGE_FIELD_COMPLETION_TOKENS = "completionTokens";
+
+    /** LLM 模型用量缓存 JSON 字段：累计请求次数。 */
+    public static final String LLM_USAGE_FIELD_REQUEST_COUNT = "requestCount";
+
+    /** LLM 模型用量缓存 JSON 字段：最近使用时间。 */
+    public static final String LLM_USAGE_FIELD_LAST_USED_AT = "lastUsedAt";
+
+    /** LLM 模型用量缓存 JSON 字段：额度耗尽标记。 */
+    public static final String LLM_USAGE_FIELD_QUOTA_EXHAUSTED = "quotaExhausted";
+
+    /** LLM 模型用量缓存 JSON 字段：额度耗尽原因。 */
+    public static final String LLM_USAGE_FIELD_QUOTA_EXHAUSTED_REASON = "quotaExhaustedReason";
+
     /** LLM 翻译未启用时的错误提示。 */
     public static final String LLM_DISABLED_ERROR_MESSAGE = "LLM translation is disabled";
 
@@ -164,6 +200,36 @@ public final class TranslationConstants {
     /** LLM 请求失败时的错误提示前缀。 */
     public static final String LLM_REQUEST_FAILED_MESSAGE_PREFIX = "LLM translation request failed: ";
 
+    /** LLM 模型额度不足时的错误提示前缀。 */
+    public static final String LLM_QUOTA_EXCEEDED_MESSAGE_PREFIX = "LLM model quota exceeded: ";
+
+    /** LLM 所有模型额度不足时的错误提示。 */
+    public static final String LLM_ALL_MODELS_QUOTA_EXHAUSTED_ERROR_MESSAGE = "All configured LLM free model quotas are exhausted";
+
+    /** LLM 模型池未配置时的错误提示。 */
+    public static final String LLM_MODEL_POOL_EMPTY_ERROR_MESSAGE = "LLM translation requires at least one model";
+
+    /** LLM 响应缺少 usage 时的日志提示。 */
+    public static final String LLM_USAGE_MISSING_WARNING_MESSAGE = "LLM response usage missing, estimated tokens will be recorded";
+
+    /** LLM 默认限额错误原因。 */
+    public static final String LLM_QUOTA_EXHAUSTED_DEFAULT_REASON = "quota exceeded";
+
+    /** LLM 限额错误关键字：quota。 */
+    public static final String LLM_QUOTA_ERROR_KEYWORD_QUOTA = "quota";
+
+    /** LLM 限额错误关键字：insufficient。 */
+    public static final String LLM_QUOTA_ERROR_KEYWORD_INSUFFICIENT = "insufficient";
+
+    /** LLM 限额错误关键字：rate_limit。 */
+    public static final String LLM_QUOTA_ERROR_KEYWORD_RATE_LIMIT = "rate_limit";
+
+    /** LLM 限额错误关键字：余额。 */
+    public static final String LLM_QUOTA_ERROR_KEYWORD_BALANCE_CN = "余额";
+
+    /** LLM 限额错误关键字：额度。 */
+    public static final String LLM_QUOTA_ERROR_KEYWORD_QUOTA_CN = "额度";
+
     /** LLM system prompt 与动态术语表之间的分隔符。 */
     public static final String LLM_PROMPT_SECTION_SEPARATOR = "\n\n";
 
@@ -175,6 +241,24 @@ public final class TranslationConstants {
 
     /** LLM 动态术语表最大条目数，避免 prompt 过长影响接口稳定性。 */
     public static final int LLM_DYNAMIC_GLOSSARY_MAX_TERMS = 300;
+
+    /** LLM 翻译最小并发许可数，避免配置异常时没有可用并发。 */
+    public static final int LLM_MIN_CONCURRENCY_PERMITS = 1;
+
+    /** LLM 翻译最大并发许可数，避免批量重翻时压垮外部模型服务。 */
+    public static final int LLM_MAX_CONCURRENCY_PERMITS = 5;
+
+    /** LLM 并发等待被中断时的错误提示。 */
+    public static final String LLM_CONCURRENCY_INTERRUPTED_ERROR_MESSAGE = "LLM translation concurrency interrupted";
+
+    /** LLM token 估算：英文字符折算 token 的字符数。 */
+    public static final int LLM_TOKEN_ESTIMATE_ENGLISH_CHARS_PER_TOKEN = 4;
+
+    /** LLM token 估算：最小估算 token 数，避免极短文本被低估。 */
+    public static final long LLM_TOKEN_ESTIMATE_MIN_TOKENS = 1L;
+
+    /** LLM 模型用量缓存临时文件后缀。 */
+    public static final String LLM_USAGE_TEMP_FILE_SUFFIX = ".tmp";
 
     /** 卡片文本归一化正则：忽略大小写的 Ki 英文词。 */
     public static final String NORMALIZE_REGEX_KI_WORD = "(?i)\\bKi\\b";

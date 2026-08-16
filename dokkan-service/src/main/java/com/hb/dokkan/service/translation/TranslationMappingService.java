@@ -80,7 +80,7 @@ public class TranslationMappingService {
     }
 
     /**
-     * 按原文新增或更新初始化映射。
+     * 按原文新增初始化映射，已存在时不覆盖页面维护的数据。
      *
      * @param sourceText  原文术语或短语
      * @param targetText  中文译文
@@ -98,7 +98,7 @@ public class TranslationMappingService {
         mapping.setMappingType(StringUtils.defaultIfBlank(mappingType, TranslationMappingConstants.MAPPING_TYPE_SYSTEM));
         mapping.setEnabled(TranslationMappingConstants.DEFAULT_ENABLED);
         mapping.setRemark(remark);
-        translationMappingRepository.saveOrUpdateBySourceText(mapping);
+        translationMappingRepository.saveIfAbsentBySourceText(mapping);
     }
 
     /**

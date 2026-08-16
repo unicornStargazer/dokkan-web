@@ -1,5 +1,7 @@
 package com.hb.dokkan.config.translation;
 
+import java.util.List;
+
 /**
  * @Description LLM翻译配置常量
  * @Author stargazer
@@ -15,6 +17,37 @@ public final class LlmTranslationConfigConstants {
 
     /** LLM 翻译默认温度，较低温度用于保证翻译结果稳定。 */
     public static final double DEFAULT_TEMPERATURE = 0.1D;
+
+    /** LLM 免费模型默认 token 额度。 */
+    public static final long DEFAULT_FREE_QUOTA_TOKENS = 1_000_000L;
+
+    /** LLM 模型用量默认持久化文件。 */
+    public static final String DEFAULT_USAGE_FILE = "./data/dokkan-llm-model-usage.json";
+
+    /** LLM 单次翻译默认预估输出 token 数。 */
+    public static final long DEFAULT_ESTIMATED_COMPLETION_TOKENS = 2_000L;
+
+    /** LLM 遇到额度错误时默认最大模型切换尝试次数。 */
+    public static final int DEFAULT_QUOTA_SWITCH_MAX_ATTEMPTS = 12;
+
+    /** LLM 默认可切换免费模型池，按用户提供顺序排列。 */
+    public static final List<String> DEFAULT_MODELS = List.of(
+            "qwen3.7-max-2026-05-20",
+            "qwen3.7-max",
+            "qwen3.7-max-2026-05-17",
+            "qwen3.7-max-preview",
+            "qwen3.7-plus-2026-05-26",
+            "qwen3.7-max-2026-05-20",
+            "qwen3.7-flash-2026-07-15",
+            "qwen3.7-plus",
+            "qwen3.7-max-2026-06-08",
+            "glm-5.2",
+            "kimi-k2.7-code",
+            "deepseek-v4-flash-0731",
+            "qwen3.8-2.4t-a95b",
+            "qwen3.8-max",
+            "deepseek-v4-pro-0813"
+    );
 
     /** LLM 默认 system prompt，约束模型按卡片队长技、被动技、必杀技等模板输出自然简体中文。 */
     public static final String DEFAULT_SYSTEM_PROMPT = """
@@ -61,6 +94,13 @@ public final class LlmTranslationConfigConstants {
                If the source says "plus an additional ...", translate as 另有...再提升Y%.
                Example: "Movie Heroes Category Ki +3 and HP, ATK & DEF +170%" ->
                「剧场版英雄」类别的气力+3、HP、ATK、DEF提升170%。
+               Long Leader Skill text with multiple base categories and additional categories must use this standard template;
+               only replace the quoted category names and numeric values, and keep the line breaks and Chinese punctuation:
+               「魔之力」或是「纯粹赛亚人」类别的
+               气力+3、HP提升200%、ATK与DEF提升170%，
+               若有包含「龙珠追寻者」或是「超越时空之人」
+               或是「亲子的羁绊」类别，
+               HP、ATK、DEF再提升50%
             2. Super Attack / Ultra Super Attack text should follow:
                N回合内ATK与DEF提升/大幅提升/超大幅提升，对敌人造成...伤害，并...
                Preserve effect order and duration. Do not invent missing effects.

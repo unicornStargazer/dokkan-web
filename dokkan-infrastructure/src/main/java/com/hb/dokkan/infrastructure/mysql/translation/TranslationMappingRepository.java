@@ -71,20 +71,20 @@ public class TranslationMappingRepository extends ServiceImpl<TranslationMapping
     }
 
     /**
-     * 按原文新增或更新翻译映射。
+     * 按原文新增翻译映射，已存在时保留用户维护的数据不覆盖。
      *
      * @param mapping 翻译映射
-     * @return 是否保存成功
+     * @return 是否新增成功
      */
-    public boolean saveOrUpdateBySourceText(TranslationMappingPO mapping) {
+    public boolean saveIfAbsentBySourceText(TranslationMappingPO mapping) {
         if (Objects.isNull(mapping) || StringUtils.isBlank(mapping.getSourceText())) {
             return false;
         }
         TranslationMappingPO existing = getBySourceText(mapping.getSourceText());
         if (Objects.nonNull(existing)) {
-            mapping.setId(existing.getId());
+            return false;
         }
-        return this.saveOrUpdate(mapping);
+        return this.save(mapping);
     }
 
     /**

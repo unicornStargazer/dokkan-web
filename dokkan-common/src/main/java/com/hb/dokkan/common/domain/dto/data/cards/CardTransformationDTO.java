@@ -1,6 +1,7 @@
 package com.hb.dokkan.common.domain.dto.data.cards;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 /**
@@ -10,20 +11,24 @@ import lombok.*;
  * @date 2026/1/5 15:47
  **/
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CardTransformationDTO {
     /**
      * 变身后卡牌id
      */
+    @JsonProperty("next_card_id")
     private Long nextCardId;
 
     /**
      * 前一形态卡牌id
      */
+    @JsonProperty("start_card_id")
     private Long startCardId;
 
     /**
      * 变身后卡牌信息
      */
+    @JsonProperty("next_card")
     private NextCardDTO nextCard;
 
 

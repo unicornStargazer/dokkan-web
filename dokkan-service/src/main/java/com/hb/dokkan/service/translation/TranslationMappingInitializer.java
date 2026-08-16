@@ -35,6 +35,9 @@ public class TranslationMappingInitializer {
     @Value(TranslationMappingConstants.GLOSSARY_FILE_PROPERTY)
     private String glossaryFile;
 
+    @Value(TranslationMappingConstants.NAME_MAPPING_FILE_PROPERTY)
+    private String nameMappingFile;
+
     /**
      * 初始化翻译映射表，启动时将已有静态词表和历史自定义词表写入数据库。
      */
@@ -45,9 +48,10 @@ public class TranslationMappingInitializer {
             return;
         }
         try {
-            // 先导入系统静态词表，再导入历史自定义词表，保证自定义词表覆盖系统默认值。
+            // 先导入系统静态词表，再导入历史自定义词表和角色名词表，保证翻译时可优先保护专名。
             initializeDefaultMappings();
             initializeCustomMappings();
+            initializeNameMappings();
             translationMappingService.refreshMappingCache();
             log.info("translation mapping initialization completed");
         } catch (Exception e) {
@@ -79,6 +83,23 @@ public class TranslationMappingInitializer {
             log.info("custom translation glossary does not exist, location={}", glossaryFile);
         } catch (Exception e) {
             log.warn("custom translation mapping initialization failed, location={}", glossaryFile, e);
+        }
+    }
+
+    /**
+     * 初始化角色名标准翻译映射。
+     */
+    private void initializeNameMappings() {
+        try (InputStream input = resourceLoader.getResource(nameMappingFile).getInputStream()) {
+            Map<String, String> values = JsonUtils.inputStream2Map(input, String.class, String.class);
+            values.forEach((source, target) -> translationMappingService
+                    .saveInitializationMapping(source, target, TranslationMappingConstants.MAPPING_TYPE_CHARACTER,
+                            TranslationMappingConstants.NAME_MAPPING_REMARK));
+            log.info("name translation mappings initialized, location={}, size={}", nameMappingFile, values.size());
+        } catch (FileNotFoundException e) {
+            log.info("name translation mapping file does not exist, location={}", nameMappingFile);
+        } catch (Exception e) {
+            log.warn("name translation mapping initialization failed, location={}", nameMappingFile, e);
         }
     }
 }

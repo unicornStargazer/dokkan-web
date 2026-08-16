@@ -13,7 +13,9 @@ import org.dromara.easyes.core.conditions.select.LambdaEsQueryWrapper;
 import org.dromara.easyes.core.kernel.EsWrappers;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -82,5 +84,35 @@ public class DokkanEsCardRepository {
             return Optional.empty();
         }
         return Optional.ofNullable(cardEsPOS.getFirst());
+    }
+
+    /**
+     * 批量查询已有卡片文档。
+     *
+     * @param cardIds 卡片 ID 列表
+     * @return 已存在的 ES 文档列表
+     */
+    public List<CardEsPO> queryByCardIds(List<Long> cardIds) {
+        if (CollectionUtils.isEmpty(cardIds)) {
+            return List.of();
+        }
+        if (cardIds.size() <= 500) {
+            LambdaEsQueryWrapper<CardEsPO> wrapper = EsWrappers.lambdaQuery(CardEsPO.class);
+            wrapper.in(CardEsPO::getCardId, cardIds);
+            List<CardEsPO> esCards = dokkanEsCardMapper.selectList(wrapper);
+            return Objects.isNull(esCards) ? List.of() : esCards;
+        }
+        Map<Long, CardEsPO> result = new HashMap<>();
+        for (int start = 0; start < cardIds.size(); start += 500) {
+            int end = Math.min(cardIds.size(), start + 500);
+            List<Long> batchIds = cardIds.subList(start, end);
+            LambdaEsQueryWrapper<CardEsPO> wrapper = EsWrappers.lambdaQuery(CardEsPO.class);
+            wrapper.in(CardEsPO::getCardId, batchIds);
+            List<CardEsPO> batch = dokkanEsCardMapper.selectList(wrapper);
+            if (!CollectionUtils.isEmpty(batch)) {
+                batch.forEach(cardEsPO -> result.put(cardEsPO.getCardId(), cardEsPO));
+            }
+        }
+        return List.copyOf(result.values());
     }
 }

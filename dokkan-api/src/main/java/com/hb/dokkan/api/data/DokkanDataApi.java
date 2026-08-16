@@ -5,8 +5,10 @@ import com.hb.dokkan.common.domain.request.data.SyncStartRequest;
 import com.hb.dokkan.common.domain.request.data.TranslationRequest;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.domain.response.data.SyncProgressResponse;
+import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.service.DokkanDataDelegate;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
  * @Author stargazer
  * @Date 2025/6/2 21:38
  **/
+@Slf4j
 @RestController
 @RequestMapping("/data")
 public class DokkanDataApi {
@@ -33,7 +36,10 @@ public class DokkanDataApi {
      */
     @PostMapping("/init-card")
     public DokkanResponse initCard() {
-        return dataDelegate.initCard();
+        log.info("initCard request");
+        DokkanResponse response = dataDelegate.initCard();
+        log.info("initCard response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -43,7 +49,10 @@ public class DokkanDataApi {
      */
     @PostMapping("/sync-es-card")
     public DokkanResponse syncEsCardData() {
-        return dataDelegate.syncEsCardData();
+        log.info("syncEsCardData request");
+        DokkanResponse response = dataDelegate.syncEsCardData();
+        log.info("syncEsCardData response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -54,7 +63,10 @@ public class DokkanDataApi {
      */
     @PostMapping("/sync-card-by-ids")
     public DokkanResponse<Integer> syncCardByIds(@RequestBody CardIdSyncRequest request) {
-        return dataDelegate.syncCardByIds(request);
+        log.info("syncCardByIds request:{}", JsonUtils.object2Json(request));
+        DokkanResponse<Integer> response = dataDelegate.syncCardByIds(request);
+        log.info("syncCardByIds response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -65,7 +77,10 @@ public class DokkanDataApi {
      */
     @PostMapping("/sync-start")
     public DokkanResponse<String> startSync(@RequestBody SyncStartRequest request) {
-        return dataDelegate.startSync(request);
+        log.info("startSync request:{}", JsonUtils.object2Json(request));
+        DokkanResponse<String> response = dataDelegate.startSync(request);
+        log.info("startSync response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -76,7 +91,10 @@ public class DokkanDataApi {
      */
     @GetMapping("/sync-progress/{jobId}")
     public DokkanResponse<SyncProgressResponse> syncProgress(@PathVariable String jobId) {
-        return dataDelegate.syncProgress(jobId);
+        log.info("syncProgress request, jobId:{}", jobId);
+        DokkanResponse<SyncProgressResponse> response = dataDelegate.syncProgress(jobId);
+        log.info("syncProgress response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -87,7 +105,10 @@ public class DokkanDataApi {
      */
     @PostMapping("/translate")
     public DokkanResponse<String> translate(@RequestBody TranslationRequest request) {
-        return dataDelegate.translate(request);
+        log.info("translate request:{}", JsonUtils.object2Json(request));
+        DokkanResponse<String> response = dataDelegate.translate(request);
+        log.info("translate response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -98,7 +119,10 @@ public class DokkanDataApi {
      */
     @PostMapping("/translate/llm")
     public DokkanResponse<String> translateByLlm(@RequestBody TranslationRequest request) {
-        return dataDelegate.translateByLlm(request);
+        log.info("translateByLlm request:{}", JsonUtils.object2Json(request));
+        DokkanResponse<String> response = dataDelegate.translateByLlm(request);
+        log.info("translateByLlm response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -108,7 +132,10 @@ public class DokkanDataApi {
      */
     @PostMapping("/init-category")
     public DokkanResponse initCategories() {
-        return dataDelegate.initCategories();
+        log.info("initCategories request");
+        DokkanResponse response = dataDelegate.initCategories();
+        log.info("initCategories response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -118,7 +145,10 @@ public class DokkanDataApi {
      */
     @PostMapping("/init-link")
     public DokkanResponse initLinks() {
-        return dataDelegate.initLinks();
+        log.info("initLinks request");
+        DokkanResponse response = dataDelegate.initLinks();
+        log.info("initLinks response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 
     /**
@@ -129,6 +159,9 @@ public class DokkanDataApi {
      */
     @GetMapping("/fix-db-data/{fixType}")
     public DokkanResponse fixDbData(@PathVariable("fixType") Integer fixType) {
-        return dataDelegate.fixDbData(fixType);
+        log.info("fixDbData request, fixType:{}", fixType);
+        DokkanResponse response = dataDelegate.fixDbData(fixType);
+        log.info("fixDbData response:{}", JsonUtils.object2Json(response));
+        return response;
     }
 }

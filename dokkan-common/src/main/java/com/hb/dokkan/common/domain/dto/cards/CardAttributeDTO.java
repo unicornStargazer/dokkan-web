@@ -1,5 +1,6 @@
 package com.hb.dokkan.common.domain.dto.cards;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.hb.dokkan.common.domain.dto.data.cards.CardTransformationDTO;
 import com.hb.dokkan.common.domain.dto.data.cards.PotentialDTO;
 import lombok.Data;
@@ -13,6 +14,7 @@ import java.util.List;
  * @date 2026/1/5 15:46
  **/
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CardAttributeDTO {
     /**
      * 队长技id

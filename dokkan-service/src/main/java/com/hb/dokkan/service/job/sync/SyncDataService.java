@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.google.common.collect.Maps;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
+import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
 import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoAttribute;
 import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoDTO;
@@ -23,6 +24,7 @@ import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.common.utils.JsonUtils;
+import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
 import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
@@ -47,6 +49,7 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.dromara.easyes.core.conditions.select.LambdaEsQueryWrapper;
 import org.dromara.easyes.core.kernel.EsWrappers;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.CollectionUtils;
@@ -59,7 +62,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -108,6 +114,12 @@ public class SyncDataService {
 
     @Resource
     private DokkanThreadPoolExecutor dokkanThreadPoolExecutor;
+
+    @Resource
+    private HttpPoolProperties httpPoolProperties;
+
+    @Resource(name = "dokkanExecutor")
+    private TaskExecutor dokkanExecutor;
 
     @Resource
     private DokkanEsCardMapper esCardMapper;
@@ -167,6 +179,16 @@ public class SyncDataService {
     }
 
     /**
+     * 按指定卡片 ID 批量强制重新翻译卡片数据。
+     *
+     * @param cardIds 卡片 ID 列表
+     * @return 成功同步数量
+     */
+    public int retranslateCardsByIds(List<Long> cardIds) {
+        return syncCardsByIdsInternal(cardIds, false, true);
+    }
+
+    /**
      * 按指定卡片 ID 同步卡片数据。
      *
      * @param cardIds                 卡片 ID 列表
@@ -195,11 +217,9 @@ public class SyncDataService {
                 CardSyncConstants.MESSAGE_FETCH_MANUAL_CARD_PREFIX + distinctCardIds.size()
                         + CardSyncConstants.MESSAGE_CARD_ID_SUFFIX);
 
-        // 先按指定 ID 从 DokkanDB 查询原始数据，查不到时直接按业务异常返回。
-        List<WikiCardDTO> wikiCards = forceRetranslate ? distinctCardIds.stream()
-                .map(cardId -> dokkanDbFacade.getCard(cardId, true))
-                .filter(Objects::nonNull)
-                .toList() : dokkanDbFacade.getCards(distinctCardIds);
+        // 先按指定 ID 从 DokkanDB 查询原始数据，强制重翻时使用有界并发加速外部拉取和 LLM 组装。
+        List<WikiCardDTO> wikiCards = forceRetranslate ? fetchRetranslateCards(distinctCardIds)
+                : dokkanDbFacade.getCards(distinctCardIds);
         if (CollectionUtils.isEmpty(wikiCards)) {
             throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
         }
@@ -213,6 +233,88 @@ public class SyncDataService {
         WikiCardBO cardData = new WikiCardBO();
         wikiCardHelper.buildData(cardData, wikiCards);
         return persistCardData(cardData, preserveLocalizedFields);
+    }
+
+    /**
+     * 并发拉取并重新组装待翻译卡片，保持返回顺序与请求 ID 顺序一致。
+     *
+     * @param cardIds 卡片 ID 列表
+     * @return 重新组装后的卡片列表
+     */
+    private List<WikiCardDTO> fetchRetranslateCards(List<Long> cardIds) {
+        if (cardIds.size() <= 1) {
+            return cardIds.stream()
+                    .map(cardId -> dokkanDbFacade.getCard(cardId, true))
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+        int permits = llmConcurrencyPermits();
+        Semaphore semaphore = new Semaphore(permits);
+        log.info("batch retranslate fetch started, cardIds:{}, concurrency:{}", cardIds, permits);
+        List<CompletableFuture<WikiCardDTO>> futures = cardIds.stream()
+                .map(cardId -> CompletableFuture.supplyAsync(() -> fetchRetranslateCard(cardId, semaphore), dokkanExecutor))
+                .toList();
+        List<WikiCardDTO> cards = futures.stream()
+                .map(this::joinRetranslateCard)
+                .filter(Objects::nonNull)
+                .toList();
+        log.info("batch retranslate fetch completed, requestedCount:{}, fetchedCount:{}", cardIds.size(), cards.size());
+        return cards;
+    }
+
+    /**
+     * 在并发许可控制下拉取单张强制重翻卡片。
+     *
+     * @param cardId    卡片 ID
+     * @param semaphore 并发许可
+     * @return 重新组装后的卡片
+     */
+    private WikiCardDTO fetchRetranslateCard(Long cardId, Semaphore semaphore) {
+        boolean acquired = false;
+        try {
+            semaphore.acquire();
+            acquired = true;
+            log.info("batch retranslate card started, cardId:{}", cardId);
+            WikiCardDTO card = dokkanDbFacade.getCard(cardId, true);
+            log.info("batch retranslate card completed, cardId:{}, found:{}", cardId, Objects.nonNull(card));
+            return card;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(TranslationConstants.LLM_CONCURRENCY_INTERRUPTED_ERROR_MESSAGE, e);
+        } finally {
+            if (acquired) {
+                semaphore.release();
+            }
+        }
+    }
+
+    /**
+     * 获取并发重翻 Future 结果并透传真实异常。
+     *
+     * @param future 卡片重翻 Future
+     * @return 重新组装后的卡片
+     */
+    private WikiCardDTO joinRetranslateCard(CompletableFuture<WikiCardDTO> future) {
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException(cause);
+        }
+    }
+
+    /**
+     * 获取 LLM 并发许可数，复用 HTTP 并发配置并做上限保护。
+     *
+     * @return 并发许可数
+     */
+    private int llmConcurrencyPermits() {
+        int configured = httpPoolProperties.getConcurrency().getSemaphorePermits();
+        return Math.max(TranslationConstants.LLM_MIN_CONCURRENCY_PERMITS,
+                Math.min(configured, TranslationConstants.LLM_MAX_CONCURRENCY_PERMITS));
     }
 
     /**
@@ -365,8 +467,12 @@ public class SyncDataService {
         log.info("full ES card sync started");
         SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ES_PREPARE,
                 CardSyncConstants.STAGE_PREPARE_ES_INDEX, CardSyncConstants.MESSAGE_PREPARE_ES_INDEX);
-        Boolean createdIndex = esCardMapper.createIndex();
-        if (!createdIndex) {
+        if (esCardMapper.existsIndex(DokkanEsCardMapper.INDEX_NAME)
+                && !esCardMapper.deleteIndex(DokkanEsCardMapper.INDEX_NAME)) {
+            log.error("删除es索引失败 indexName:{}", DokkanEsCardMapper.INDEX_NAME);
+            throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
+        }
+        if (!esCardMapper.createIndex()) {
             log.error("创建es索引失败 indexName:{}", DokkanEsCardMapper.INDEX_NAME);
             throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
         }
@@ -410,16 +516,13 @@ public class SyncDataService {
             log.error("构建es卡片索引失败");
             return;
         }
-        transactionTemplate.execute(status -> {
-            try {
-                Integer insertCnt = esCardMapper.insertBatch(esCards);
-                log.info("同步es卡片索引成功,insetCnt:{}", insertCnt);
-            } catch (Exception e) {
-                log.error("SyncDataService#syncEsCardData error :{}", e.getMessage(), e);
-                status.setRollbackOnly();
-            }
-            return null;
-        });
+        try {
+            Integer insertCnt = esCardMapper.insertBatch(esCards);
+            log.info("同步es卡片索引成功,insetCnt:{}", insertCnt);
+        } catch (Exception e) {
+            log.error("SyncDataService#syncEsCardData error :{}", e.getMessage(), e);
+            throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR, e);
+        }
     }
 
     /**
@@ -457,10 +560,6 @@ public class SyncDataService {
 
         // 先构建新 ES 文档，再删除旧文档，避免构建失败导致旧数据被清空。
         List<CardEsPO> esCards = esCardSyncHelper.buildEsCardPO(dataMap);
-        LambdaEsQueryWrapper<CardEsPO> deleteWrapper = EsWrappers.lambdaQuery(CardEsPO.class);
-        deleteWrapper.in(CardEsPO::getCardId, distinctCardIds);
-        esCardMapper.delete(deleteWrapper);
-
         if (CollectionUtils.isEmpty(esCards)) {
             log.info("incremental ES sync completed with no MySQL cards, deletedCardIds:{}", distinctCardIds);
             return 0;

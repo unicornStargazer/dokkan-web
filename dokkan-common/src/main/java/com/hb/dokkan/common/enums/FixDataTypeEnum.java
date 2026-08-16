@@ -17,6 +17,11 @@ public enum FixDataTypeEnum {
      * 修复数据库eza发布时间
      */
     FIX_DB_EZA_PUBLISH_TIME(0, "修复数据库eza发布时间"),
+
+    /**
+     * 修复角色名错误翻译
+     */
+    FIX_NAME_TRANSLATION_ERROR(1, "修复角色名错误翻译"),
     ;
 
     private final Integer code;

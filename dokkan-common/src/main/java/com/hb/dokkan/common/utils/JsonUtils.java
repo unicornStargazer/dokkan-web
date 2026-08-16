@@ -269,6 +269,20 @@ public class JsonUtils {
     }
 
     /**
+     * 将对象转换为 String 到 Object 的 Map，空对象返回空 Map。
+     *
+     * @param value 待转换对象
+     * @return String 到 Object 的 Map
+     */
+    public static Map<String, Object> convert2StringObjectMap(Object value) {
+        if (Objects.isNull(value)) {
+            return Collections.emptyMap();
+        }
+        MapType mapType = OBJECT_MAPPER.getTypeFactory().constructMapType(Map.class, String.class, Object.class);
+        return OBJECT_MAPPER.convertValue(value, mapType);
+    }
+
+    /**
      * 将对象转换为指定类型，常用于经过 JSON 工具读取后的结构转换。
      *
      * @param value 待转换对象
@@ -334,6 +348,28 @@ public class JsonUtils {
         } catch (JsonProcessingException e) {
             log.error("json read first array object text fail, arrayField={}, objectField={}, textField={}",
                     arrayField, objectField, textField, e);
+            throw new DokkanSysException(e.getMessage());
+        }
+    }
+
+    /**
+     * 读取 JSON 字符串中的顶层对象字段并转换为指定类型。
+     *
+     * @param json        JSON 字符串
+     * @param objectField 顶层对象字段名
+     * @param clazz       目标类型
+     * @param <T>         目标泛型
+     * @return 转换后的对象，字段不存在或为空时返回 null
+     */
+    public static <T> T readObjectField(String json, String objectField, Class<T> clazz) {
+        if (StringUtils.isAnyBlank(json, objectField) || Objects.isNull(clazz)) {
+            return null;
+        }
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(json).path(objectField);
+            return node.isMissingNode() || node.isNull() ? null : OBJECT_MAPPER.convertValue(node, clazz);
+        } catch (JsonProcessingException e) {
+            log.error("json read object field fail, objectField={}, target={}", objectField, clazz.getName(), e);
             throw new DokkanSysException(e.getMessage());
         }
     }

@@ -100,6 +100,15 @@ public final class TranslationMappingConstants {
     /** 翻译映射初始化词表配置。 */
     public static final String GLOSSARY_FILE_PROPERTY = "${dokkan.translation.glossary-file:classpath:dokkan-translation-glossary.json}";
 
+    /** 角色名标准映射初始化配置。 */
+    public static final String NAME_MAPPING_FILE_PROPERTY = "${dokkan.translation.name-mapping-file:classpath:name.json}";
+
+    /** 存量角色名错误翻译修复映射配置。 */
+    public static final String NAME_ERROR_FILE_PROPERTY = "${dokkan.translation.name-error-file:classpath:name-error.json}";
+
+    /** 初始化映射备注：角色名标准 JSON 词表。 */
+    public static final String NAME_MAPPING_REMARK = "由角色名标准翻译词表初始化";
+
     /** 工具类禁止实例化。 */
     private TranslationMappingConstants() {
     }

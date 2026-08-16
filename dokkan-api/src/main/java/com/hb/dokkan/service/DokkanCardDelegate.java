@@ -3,6 +3,7 @@ package com.hb.dokkan.service;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
+import com.hb.dokkan.common.domain.request.cards.CardIdSyncRequest;
 import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
 import com.hb.dokkan.common.domain.request.cards.CardRetranslateRequest;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
@@ -76,6 +77,31 @@ public class DokkanCardDelegate {
         CardDetailResponse response = dokkanCardConvert.detailVoToResponse(cardDetailVO);
         return DokkanResponse.<CardDetailResponse>builder()
                 .withModel(response)
+                .success();
+    }
+
+    /**
+     * 批量重新翻译卡片，负责参数校验和响应封装。
+     *
+     * @param request 批量卡片 ID 请求
+     * @return 成功重新翻译数量响应
+     */
+    public DokkanResponse<Integer> retranslateBatch(CardIdSyncRequest request) {
+        if (Objects.isNull(request) || Objects.isNull(request.getCardIds())) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
+        // 过滤非法 ID 并按原始勾选顺序去重，避免同一张卡重复触发外部 LLM。
+        List<Long> cardIds = request.getCardIds().stream()
+                .filter(Objects::nonNull)
+                .filter(cardId -> cardId > CardSyncConstants.MIN_VALID_CARD_ID)
+                .distinct()
+                .toList();
+        if (cardIds.isEmpty() || cardIds.size() > CardSyncConstants.MANUAL_SYNC_MAX_CARD_COUNT) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
+        Integer count = cardService.retranslateCards(cardIds);
+        return DokkanResponse.<Integer>builder()
+                .withModel(count)
                 .success();
     }
 
