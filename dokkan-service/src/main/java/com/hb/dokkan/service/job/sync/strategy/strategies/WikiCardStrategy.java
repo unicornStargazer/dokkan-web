@@ -1,9 +1,7 @@
 package com.hb.dokkan.service.job.sync.strategy.strategies;
 
 import com.google.common.collect.Lists;
-import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
-import com.hb.dokkan.common.utils.DateUtils;
 import com.hb.dokkan.common.domain.dto.data.dokkandb.DokkanDbCardDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardDTO;
 import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
@@ -27,10 +25,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Date;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
@@ -107,17 +107,20 @@ public class WikiCardStrategy implements WikiInfoStrategy {
             Map<Long, List<EzaCardPO>> existingEzaCards = ezaCardRepository.batchQueryByCardIds(
                             filteredCatalog.stream().map(DokkanDbCardDTO::getId).toList())
                     .stream().collect(Collectors.groupingBy(EzaCardPO::getCardId));
+            // 变身卡需要独立拉取，才能同时发现变身卡新增的极限阶段。
+            List<Long> transformationIds = collectTransformationCardIds(filteredCatalog);
             filteredCatalog.forEach(source -> {
                 CardPO existing = existingCards.get(source.getId());
                 if (existing == null) return;
                 translationService.registerTrustedTerm(source.getName(), existing.getCardName());
                 translationService.registerTrustedTerm(source.getTitle(), existing.getTitle());
             });
-            List<Long> cardIds = filteredCatalog.stream()
+            Set<Long> candidateCardIds = filteredCatalog.stream()
                     .filter(card -> isNewOrUpdated(card, existingCards.get(card.getId()), existingEzaCards.get(card.getId())))
                     .map(DokkanDbCardDTO::getId)
-                    .distinct()
-                    .toList();
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            candidateCardIds.addAll(transformationIds);
+            List<Long> cardIds = new ArrayList<>(candidateCardIds);
             SyncProgressContext.update(12, "抓取外部数据", "发现 " + cardIds.size() + " 个候选 cardId");
             log.info("DokkanDB incremental catalog checked, catalogSize:{}, syncCandidates:{}",
                     filteredCatalog.size(), cardIds.size());
@@ -180,6 +183,38 @@ public class WikiCardStrategy implements WikiInfoStrategy {
     }
 
     /**
+     * 收集目录中所有变身后的卡片 ID，用于补齐本地缺失的变身卡详情。
+     *
+     * @param cards DokkanDB 卡片目录
+     * @return 去重后的变身卡 ID 列表
+     */
+    private List<Long> collectTransformationCardIds(List<DokkanDbCardDTO> cards) {
+        if (CollectionUtils.isEmpty(cards)) {
+            return List.of();
+        }
+        return cards.stream()
+                .flatMap(card -> safeTransformationIds(card).stream())
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 获取卡片变身后 ID 列表，空值返回空集合。
+     *
+     * @param card DokkanDB 目录卡片
+     * @return 变身后卡片 ID 列表
+     */
+    private List<Long> safeTransformationIds(DokkanDbCardDTO card) {
+        if (Objects.isNull(card) || CollectionUtils.isEmpty(card.getTransformationIds())) {
+            return List.of();
+        }
+        return card.getTransformationIds().stream()
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /**
      * 判断目录卡片是否需要增量同步。
      *
      * @param source       DokkanDB 目录卡片
@@ -189,13 +224,11 @@ public class WikiCardStrategy implements WikiInfoStrategy {
      */
     private boolean isNewOrUpdated(DokkanDbCardDTO source, CardPO existing, List<EzaCardPO> existingEzas) {
         if (existing == null) return true;
-        if (hasMissingEzaData(source, existingEzas)) return true;
-        Date sourceUpdate = DateUtils.parseDokkanDbDate(source.getOpenAtUpdate());
-        return sourceUpdate != null && (existing.getUpdateTime() == null || sourceUpdate.after(existing.getUpdateTime()));
+        return hasMissingEzaData(source, existingEzas);
     }
 
     /**
-     * 判断已有数据是否缺少当前目录暴露的极限或超极限阶段。
+     * 判断已有数据是否缺少当前目录暴露的极限阶段。
      *
      * @param source       DokkanDB 目录卡片
      * @param existingEzas 已有极限卡片列表
@@ -217,36 +250,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                 || !existingSteps.contains(source.getStep())) {
             return true;
         }
-        if (source.getStep() >= TranslationConstants.EZA_PRE_STEP_THRESHOLD
-                && source.getStepPre() != null
-                && !existingSteps.contains(source.getStepPre())) {
-            return true;
-        }
-        Date sourceEzaPublishTime = latestSourceEzaPublishTime(source);
-        Date existingEzaPublishTime = existingEzas.stream()
-                .map(EzaCardPO::getPublishTime)
-                .filter(Objects::nonNull)
-                .max(Date::compareTo)
-                .orElse(null);
-        return sourceEzaPublishTime != null && (existingEzaPublishTime == null
-                || sourceEzaPublishTime.after(existingEzaPublishTime));
-    }
-
-    /**
-     * 获取目录卡片暴露的最新 EZA 发布时间。
-     *
-     * @param source DokkanDB 目录卡片
-     * @return 最新 EZA 发布时间，不存在时返回 null
-     */
-    private Date latestSourceEzaPublishTime(DokkanDbCardDTO source) {
-        Date awakeningEzaTime = CollectionUtils.isEmpty(source.getAwakeningData()) ? null
-                : source.getAwakeningData().stream()
-                .map(DokkanDbCardDTO.AwakeningDTO::getOpenAtEza)
-                .map(DateUtils::parseDokkanDbDate)
-                .filter(Objects::nonNull)
-                .max(Date::compareTo)
-                .orElse(null);
-        return DateUtils.latestDate(awakeningEzaTime, DateUtils.parseDokkanDbDate(source.getOpenAtUpdate()));
+        return false;
     }
 
     @PostConstruct

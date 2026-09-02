@@ -87,7 +87,7 @@ public class DokkanTranslationService {
      * @param source  原文术语
      * @param chinese 简体中文术语
      */
-    public void registerTrustedTerm(String source, String chinese) {
+    public void  registerTrustedTerm(String source, String chinese) {
         if (StringUtils.isAnyBlank(source, chinese) || source.equals(chinese)) {
             return;
         }

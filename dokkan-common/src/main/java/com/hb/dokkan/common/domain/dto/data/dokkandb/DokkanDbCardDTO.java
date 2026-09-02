@@ -1,5 +1,6 @@
 package com.hb.dokkan.common.domain.dto.data.dokkandb;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
@@ -88,8 +89,10 @@ public class DokkanDbCardDTO {
     @JsonProperty("finish_skill_increase_rates")
     private List<Integer> finishSkillIncreaseRates;
 
+    @JsonAlias("optimal_awakening_step")
     private Integer step;
     @JsonProperty("step_pre")
+    @JsonAlias("optimal_awakening_step_pre")
     private Integer stepPre;
     @JsonProperty("eza_skill_lv_max")
     private Integer ezaSkillLvMax;

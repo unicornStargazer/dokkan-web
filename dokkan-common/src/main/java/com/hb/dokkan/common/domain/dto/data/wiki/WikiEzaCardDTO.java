@@ -1,5 +1,6 @@
 package com.hb.dokkan.common.domain.dto.data.wiki;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
@@ -24,6 +25,8 @@ public class WikiEzaCardDTO implements Serializable {
     /**
      * 极限阶段
      */
+    @JsonProperty("optimal_awakening_step")
+    @JsonAlias("step")
     private Integer step;
     /**
      * 最大等级

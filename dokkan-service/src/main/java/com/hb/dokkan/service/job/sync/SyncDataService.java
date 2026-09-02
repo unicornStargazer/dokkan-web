@@ -12,6 +12,7 @@ import com.hb.dokkan.common.domain.dto.data.cards.EzaCardInfoDTO;
 import com.hb.dokkan.common.domain.dto.data.cards.SkillDTO;
 import com.hb.dokkan.common.domain.dto.data.cards.SpecialAttackDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardDTO;
+import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardTransformationDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCategoryDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiLinkDTO;
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
@@ -229,10 +230,49 @@ public class SyncDataService {
                 CardSyncConstants.MESSAGE_FETCHED_PREFIX + wikiCards.size()
                         + CardSyncConstants.MESSAGE_VALID_CARD_SUFFIX);
 
+        // 变身链路中的后续形态也需要一起刷新，避免主卡更新后变身卡仍是旧数据。
+        wikiCards = appendTransformationCards(wikiCards, forceRetranslate);
+
         // 将外部数据转换为内部同步 BO 后复用统一持久化链路。
         WikiCardBO cardData = new WikiCardBO();
         wikiCardHelper.buildData(cardData, wikiCards);
         return persistCardData(cardData, preserveLocalizedFields);
+    }
+
+    /**
+     * 补充同步变身后的卡片数据。
+     *
+     * @param wikiCards        已抓取卡片列表
+     * @param forceRetranslate 是否强制重新翻译
+     * @return 补充变身卡后的卡片列表
+     */
+    private List<WikiCardDTO> appendTransformationCards(List<WikiCardDTO> wikiCards, boolean forceRetranslate) {
+        if (CollectionUtils.isEmpty(wikiCards)) {
+            return List.of();
+        }
+        Map<Long, WikiCardDTO> cardMap = wikiCards.stream()
+                .filter(card -> Objects.nonNull(card.getCard()))
+                .filter(card -> Objects.nonNull(card.getCard().getId()))
+                .collect(Collectors.toMap(card -> card.getCard().getId(), Function.identity(),
+                        (oldValue, newValue) -> oldValue, LinkedHashMap::new));
+        List<Long> transformationIds = wikiCards.stream()
+                .filter(card -> !CollectionUtils.isEmpty(card.getTransformations()))
+                .flatMap(card -> card.getTransformations().stream())
+                .map(WikiCardTransformationDTO::getNextCardId)
+                .filter(Objects::nonNull)
+                .filter(cardId -> !cardMap.containsKey(cardId))
+                .distinct()
+                .toList();
+        if (CollectionUtils.isEmpty(transformationIds)) {
+            return wikiCards;
+        }
+        List<WikiCardDTO> transformationCards = forceRetranslate ? fetchRetranslateCards(transformationIds)
+                : dokkanDbFacade.getCards(transformationIds);
+        transformationCards.stream()
+                .filter(card -> Objects.nonNull(card.getCard()))
+                .filter(card -> Objects.nonNull(card.getCard().getId()))
+                .forEach(card -> cardMap.putIfAbsent(card.getCard().getId(), card));
+        return new ArrayList<>(cardMap.values());
     }
 
     /**
@@ -338,10 +378,11 @@ public class SyncDataService {
                         ? 0 : cardData.getSpecialAttacks().size());
         SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_MYSQL_WRITE,
                 CardSyncConstants.STAGE_WRITE_MYSQL, CardSyncConstants.MESSAGE_WRITE_CARD_DATA);
+        Set<Long> ezaSyncCardIds = buildEzaSyncCardIds(cardData.getEzaCardInfos());
         Boolean mysqlSyncSucceeded = transactionTemplate.execute(status -> {
             try {
-                // MySQL 数据写入需要放在同一个事务内，避免卡片与关联信息不一致。
-                insertCardBaseInfo(cardData.getCardBaseData(), preserveLocalizedFields);
+                // MySQL 数据写入需要放在同一个事务内；EZA 存量卡只刷新极限技能数据，不覆盖卡片主表。
+                insertCardBaseInfo(cardData.getCardBaseData(), preserveLocalizedFields, ezaSyncCardIds);
                 insertDownPullSkillInfo(cardData.getDownPullSkills(), preserveLocalizedFields);
                 insertEzaCardInfo(cardData.getEzaCardInfos(), preserveLocalizedFields);
                 insertSpecialInfo(cardData.getSpecialAttacks(), preserveLocalizedFields);
@@ -589,7 +630,7 @@ public class SyncDataService {
     }
 
     /**
-     * 写入必杀技数据，已有记录保留本地化字段。
+     * 写入必杀技数据，已有记录仅刷新必杀技能变化字段。
      *
      * @param specialAttacks          必杀技同步数据
      * @param preserveLocalizedFields 是否保留已有本地化文案
@@ -611,17 +652,14 @@ public class SyncDataService {
             }
             special.setId(existing.getId());
             if (preserveLocalizedFields) {
-                special.setDescription(existing.getDescription());
-                special.setSpecialCategoryName(existing.getSpecialCategoryName());
-                special.setSpecialBonus1(existing.getSpecialBonus1());
-                special.setSpecialBonus2(existing.getSpecialBonus2());
+                preserveExistingSpecialFields(special, existing);
             }
         });
         saveOrUpdateByKnownId(specialRepository, specialPOS, CardSyncConstants.SPECIAL_SAVE_BATCH_SIZE);
     }
 
     /**
-     * 写入极限数据，已有记录保留本地化字段。
+     * 写入极限数据，新阶段完整新增，已有阶段仅刷新被动技能字段。
      *
      * @param ezaCardInfos           极限同步数据
      * @param preserveLocalizedFields 是否保留已有本地化文案
@@ -643,16 +681,131 @@ public class SyncDataService {
             }
             ezaCard.setId(existing.getId());
             if (preserveLocalizedFields) {
-                ezaCard.setCardName(existing.getCardName());
-                ezaCard.setTitle(existing.getTitle());
-                ezaCard.setLeaderSkill(existing.getLeaderSkill());
-                ezaCard.setPassiveSkillDesc(existing.getPassiveSkillDesc());
-            }
-            if (ezaCard.getCost() == null) {
+                preserveExistingEzaFields(ezaCard, existing);
+            } else if (ezaCard.getCost() == null) {
                 ezaCard.setCost(existing.getCost());
             }
         });
         saveOrUpdateByKnownId(ezaCardRepository, ezaCardPOS, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
+    }
+
+    /**
+     * 保留已有 EZA 字段，只允许被动技能内容随 EZA 更新变化。
+     *
+     * @param incoming 即将写入的 EZA 记录
+     * @param existing 数据库已有 EZA 记录
+     */
+    private void preserveExistingEzaFields(EzaCardPO incoming, EzaCardPO existing) {
+        Integer newPassiveSkillId = incoming.getPassiveSkillId();
+        String newPassiveSkillDesc = incoming.getPassiveSkillDesc();
+        String newAttributes = mergeEzaPassiveAttributes(incoming.getAttributes(), existing.getAttributes());
+        incoming.setCardId(existing.getCardId());
+        incoming.setCardName(existing.getCardName());
+        incoming.setLvMax(existing.getLvMax());
+        incoming.setStep(existing.getStep());
+        incoming.setTitle(existing.getTitle());
+        incoming.setType(existing.getType());
+        incoming.setPropType(existing.getPropType());
+        incoming.setCost(existing.getCost());
+        incoming.setRarity(existing.getRarity());
+        incoming.setHpValue(existing.getHpValue());
+        incoming.setAtkValue(existing.getAtkValue());
+        incoming.setDefValue(existing.getDefValue());
+        incoming.setPublishTime(existing.getPublishTime());
+        incoming.setLeaderSkillId(existing.getLeaderSkillId());
+        incoming.setLeaderSkill(existing.getLeaderSkill());
+        incoming.setPassiveSkillId(newPassiveSkillId);
+        incoming.setPassiveSkillDesc(newPassiveSkillDesc);
+        incoming.setAttributes(newAttributes);
+    }
+
+    /**
+     * 合并 EZA 属性 JSON，只刷新被动技能字段，其余属性保持旧值。
+     *
+     * @param incomingAttributes 外部同步属性 JSON
+     * @param existingAttributes 数据库已有属性 JSON
+     * @return 合并后的属性 JSON
+     */
+    private String mergeEzaPassiveAttributes(String incomingAttributes, String existingAttributes) {
+        if (StringUtils.isBlank(existingAttributes)) {
+            return incomingAttributes;
+        }
+        if (StringUtils.isBlank(incomingAttributes)) {
+            return existingAttributes;
+        }
+        try {
+            CardBaseInfoAttribute incoming = JsonUtils.json2Object(incomingAttributes, CardBaseInfoAttribute.class);
+            CardBaseInfoAttribute existing = JsonUtils.json2Object(existingAttributes, CardBaseInfoAttribute.class);
+            if (Objects.isNull(incoming) || Objects.isNull(existing)) {
+                return existingAttributes;
+            }
+            existing.setPassiveSkillSetId(incoming.getPassiveSkillSetId());
+            existing.setPassiveSkillName(incoming.getPassiveSkillName());
+            existing.setPassiveSkillDesc(incoming.getPassiveSkillDesc());
+            return JsonUtils.object2Json(existing);
+        } catch (Exception e) {
+            log.warn("merge EZA passive attributes failed", e);
+            return existingAttributes;
+        }
+    }
+
+    /**
+     * 保留已有必杀记录字段，只允许必杀技能内容随 EZA 更新变化。
+     *
+     * @param incoming 即将写入的必杀记录
+     * @param existing 数据库已有必杀记录
+     */
+    private void preserveExistingSpecialFields(SpecialPO incoming, SpecialPO existing) {
+        String newDescription = incoming.getDescription();
+        Integer newIncreaseRate = incoming.getIncreaseRate();
+        Integer newLvBonus = incoming.getLvBonus();
+        String newStyle = incoming.getStyle();
+        Integer newSpecialBonus1Lv = incoming.getSpecialBonus1Lv();
+        Integer newSpecialBonus2Lv = incoming.getSpecialBonus2Lv();
+        incoming.setSpecialId(existing.getSpecialId());
+        incoming.setDescription(newDescription);
+        incoming.setIncreaseRate(newIncreaseRate);
+        incoming.setLvBonus(newLvBonus);
+        incoming.setStyle(newStyle);
+        incoming.setLvStart(existing.getLvStart());
+        incoming.setEballNumStart(existing.getEballNumStart());
+        incoming.setSpecialCategoryId(existing.getSpecialCategoryId());
+        incoming.setSpecialCategoryName(existing.getSpecialCategoryName());
+        incoming.setSpecialBonus1(existing.getSpecialBonus1());
+        incoming.setSpecialBonus2(existing.getSpecialBonus2());
+        incoming.setSpecialBonus1Lv(newSpecialBonus1Lv);
+        incoming.setSpecialBonus2Lv(newSpecialBonus2Lv);
+        incoming.setAttributes(existing.getAttributes());
+    }
+
+    /**
+     * EZA-only 更新时保留已有扩展属性，同时保留本次同步得到的变身关系。
+     *
+     * @param incomingAttributes 外部同步属性 JSON
+     * @param existingAttributes 数据库已有属性 JSON
+     * @return 合并后的属性 JSON
+     */
+    private String mergeTransformationAttributes(String incomingAttributes, String existingAttributes) {
+        if (StringUtils.isBlank(existingAttributes)) {
+            return incomingAttributes;
+        }
+        if (StringUtils.isBlank(incomingAttributes)) {
+            return existingAttributes;
+        }
+        try {
+            CardBaseInfoAttribute incoming = JsonUtils.json2Object(incomingAttributes, CardBaseInfoAttribute.class);
+            CardBaseInfoAttribute existing = JsonUtils.json2Object(existingAttributes, CardBaseInfoAttribute.class);
+            if (Objects.isNull(incoming) || Objects.isNull(existing)) {
+                return existingAttributes;
+            }
+            if (!CollectionUtils.isEmpty(incoming.getNextCards())) {
+                existing.setNextCards(incoming.getNextCards());
+            }
+            return JsonUtils.object2Json(existing);
+        } catch (Exception e) {
+            log.warn("merge transformation attributes failed", e);
+            return existingAttributes;
+        }
     }
 
     /**
@@ -688,12 +841,29 @@ public class SyncDataService {
     }
 
     /**
-     * 写入卡片基础数据，已有记录保留本地化字段。
+     * 构建本次包含 EZA 数据的卡片 ID。
+     *
+     * @param ezaCardInfos 极限同步数据
+     * @return EZA 卡片 ID 集合
+     */
+    private Set<Long> buildEzaSyncCardIds(List<EzaCardInfoDTO> ezaCardInfos) {
+        if (CollectionUtils.isEmpty(ezaCardInfos)) {
+            return Set.of();
+        }
+        return ezaCardInfos.stream()
+                .map(EzaCardInfoDTO::getCardId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * 写入卡片基础数据，EZA 已有卡片不覆盖主表字段。
      *
      * @param cards                   卡片基础同步数据
      * @param preserveLocalizedFields 是否保留已有本地化文案
+     * @param ezaSyncCardIds          本次同步包含 EZA 数据的卡片 ID
      */
-    private void insertCardBaseInfo(List<CardBaseInfoDTO> cards, boolean preserveLocalizedFields) {
+    private void insertCardBaseInfo(List<CardBaseInfoDTO> cards, boolean preserveLocalizedFields, Set<Long> ezaSyncCardIds) {
         List<CardBaseInfoDTO> distinctedList = distinctByKey(cards, CardBaseInfoDTO::getCardId);
         List<CardPO> cardModel = convert.wikiCard2POList(distinctedList);
         checkParam(cardModel);
@@ -704,13 +874,49 @@ public class SyncDataService {
         cardModel.forEach(card -> {
             CardPO existing = existingCards.get(card.getCardId());
             card.setId(existing == null ? null : existing.getId());
-            if (preserveLocalizedFields) {
+            if (preserveLocalizedFields && isExistingEzaSyncCard(card, existing, ezaSyncCardIds)) {
+                preserveExistingCardFields(card, existing);
+            } else if (preserveLocalizedFields) {
                 preserveExistingLocalizedFields(card, existing);
             } else if (existing != null && card.getCost() == null) {
                 card.setCost(existing.getCost());
             }
         });
         saveOrUpdateByKnownId(cardRepository, cardModel, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
+    }
+
+    /**
+     * 判断当前记录是否为已有 EZA 同步卡片。
+     *
+     * @param incoming       即将写入的卡片记录
+     * @param existing       数据库已有卡片记录
+     * @param ezaSyncCardIds 本次同步包含 EZA 数据的卡片 ID
+     * @return 是否为已有 EZA 同步卡片
+     */
+    private boolean isExistingEzaSyncCard(CardPO incoming, CardPO existing, Set<Long> ezaSyncCardIds) {
+        return Objects.nonNull(existing) && Objects.nonNull(incoming)
+                && !CollectionUtils.isEmpty(ezaSyncCardIds) && ezaSyncCardIds.contains(incoming.getCardId());
+    }
+
+    /**
+     * EZA-only 更新时保留主表所有既有字段，只补主键参与批量更新。
+     *
+     * @param incoming 即将写入的卡片记录
+     * @param existing 数据库已有卡片记录
+     */
+    private void preserveExistingCardFields(CardPO incoming, CardPO existing) {
+        incoming.setCardId(existing.getCardId());
+        incoming.setCardName(existing.getCardName());
+        incoming.setTitle(existing.getTitle());
+        incoming.setType(existing.getType());
+        incoming.setPropType(existing.getPropType());
+        incoming.setCost(existing.getCost());
+        incoming.setRarity(existing.getRarity());
+        incoming.setHpValue(existing.getHpValue());
+        incoming.setDefValue(existing.getDefValue());
+        incoming.setAtkValue(existing.getAtkValue());
+        incoming.setPublishTime(existing.getPublishTime());
+        incoming.setAttributes(mergeTransformationAttributes(incoming.getAttributes(), existing.getAttributes()));
     }
 
     /**
