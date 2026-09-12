@@ -1,6 +1,8 @@
 package com.hb.dokkan.service.translation.client;
 
 import com.hb.dokkan.common.constants.TranslationConstants;
+import com.hb.dokkan.common.constants.LlmResponsesConstants;
+import com.hb.dokkan.common.domain.dto.translation.LlmResponsesDTO;
 import com.hb.dokkan.common.domain.dto.translation.LlmTokenUsageDTO;
 import com.hb.dokkan.common.domain.dto.translation.LlmTranslationResultDTO;
 import com.hb.dokkan.common.utils.JsonUtils;
@@ -17,6 +19,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 
 import java.time.Duration;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -31,26 +34,27 @@ import java.util.Objects;
 public class DokkanLlmTranslationClient {
 
     /**
-     * 调用 OpenAI 兼容聊天补全接口翻译文本，异常时记录日志并抛出明确错误。
+     * 调用 Responses 完整地址翻译文本，异常时记录日志并抛出明确错误。
      *
      * @param source       待翻译文本
      * @param systemPrompt 本次翻译使用的 system prompt
      * @param properties   LLM 翻译配置
      * @param model        本次请求使用的模型
+     * @param reasoningEffort JSON 配置中的思考程度，空值时保留旧采样参数
      * @return 翻译结果，包含译文与 token 用量
      */
     public LlmTranslationResultDTO translate(String source, String systemPrompt, LlmTranslationProperties properties,
-                                             String model) {
+                                             String model, String reasoningEffort) {
         long startTime = System.currentTimeMillis();
         try {
-            log.info("LLM translation request, model:{}, path:{}, sourceLength:{}, promptLength:{}, timeoutSeconds:{}, temperature:{}",
-                    model, properties.getChatCompletionsPath(), StringUtils.length(source),
-                    StringUtils.length(systemPrompt), properties.getTimeoutSeconds(), properties.getTemperature());
+            log.info("LLM translation request, model:{}, path:{}, sourceLength:{}, promptLength:{}, timeoutSeconds:{}, reasoningEffort:{}",
+                    model, java.net.URI.create(properties.getBaseUrl()).getPath(), StringUtils.length(source),
+                    StringUtils.length(systemPrompt), properties.getTimeoutSeconds(), reasoningEffort);
             // 构造 OpenAI 兼容请求，外部接口字段只在 Client 内部出现。
-            Map<String, Object> request = buildRequest(source, systemPrompt, properties, model);
+            Map<String, Object> request = buildRequest(source, systemPrompt, properties, model, reasoningEffort);
             String response = buildClient(properties)
                     .post()
-                    .uri(properties.getChatCompletionsPath())
+                    .uri(properties.getBaseUrl())
                     .bodyValue(request)
                     .retrieve()
                     .bodyToMono(String.class)
@@ -58,18 +62,18 @@ public class DokkanLlmTranslationClient {
             LlmTranslationResultDTO result = responseResult(response, model);
             LlmTokenUsageDTO usage = result.getUsage();
             log.info("LLM translation response, model:{}, path:{}, costMs:{}, responseLength:{}, contentLength:{}, totalTokens:{}",
-                    model, properties.getChatCompletionsPath(), System.currentTimeMillis() - startTime,
+                    model, java.net.URI.create(properties.getBaseUrl()).getPath(), System.currentTimeMillis() - startTime,
                     StringUtils.length(response), StringUtils.length(result.getContent()),
                     Objects.isNull(usage) ? null : usage.getTotalTokens());
             return result;
         } catch (LlmModelQuotaExceededException e) {
             log.warn("LLM translation quota exceeded, model={}, path={}, costMs={}, error={}",
-                    model, properties.getChatCompletionsPath(), System.currentTimeMillis() - startTime,
+                    model, java.net.URI.create(properties.getBaseUrl()).getPath(), System.currentTimeMillis() - startTime,
                     e.getMessage());
             throw e;
         } catch (IllegalStateException e) {
             log.warn("LLM translation response invalid, model={}, path={}, costMs={}, error={}",
-                    model, properties.getChatCompletionsPath(), System.currentTimeMillis() - startTime,
+                    model, java.net.URI.create(properties.getBaseUrl()).getPath(), System.currentTimeMillis() - startTime,
                     e.getMessage());
             throw e;
         } catch (WebClientResponseException e) {
@@ -78,7 +82,7 @@ public class DokkanLlmTranslationClient {
                         + e.getResponseBodyAsString(), e);
             }
             log.error("LLM translation request failed, model={}, path={}, sourceLength={}, costMs={}, status={}",
-                    model, properties.getChatCompletionsPath(), StringUtils.length(source),
+                    model, java.net.URI.create(properties.getBaseUrl()).getPath(), StringUtils.length(source),
                     System.currentTimeMillis() - startTime, e.getStatusCode(), e);
             throw new IllegalStateException(TranslationConstants.LLM_REQUEST_FAILED_MESSAGE_PREFIX + e.getMessage(), e);
         } catch (Exception e) {
@@ -87,33 +91,41 @@ public class DokkanLlmTranslationClient {
                         + e.getMessage(), e);
             }
             log.error("LLM translation request failed, model={}, path={}, sourceLength={}, costMs={}",
-                    model, properties.getChatCompletionsPath(), StringUtils.length(source),
+                    model, java.net.URI.create(properties.getBaseUrl()).getPath(), StringUtils.length(source),
                     System.currentTimeMillis() - startTime, e);
             throw new IllegalStateException(TranslationConstants.LLM_REQUEST_FAILED_MESSAGE_PREFIX + e.getMessage(), e);
         }
     }
 
     /**
-     * 构建 OpenAI 兼容聊天补全请求体。
+     * 构建 Responses 非流式请求体，指令与用户输入分离。
      *
      * @param source       待翻译文本
      * @param systemPrompt 本次翻译使用的 system prompt
      * @param properties   LLM 翻译配置
      * @param model        本次请求使用的模型
+     * @param reasoningEffort 可选思考程度，不为空时不发送 temperature
      * @return 请求体 Map
      */
-    private Map<String, Object> buildRequest(String source, String systemPrompt, LlmTranslationProperties properties,
-                                             String model) {
-        return Map.of(
+    Map<String, Object> buildRequest(String source, String systemPrompt, LlmTranslationProperties properties,
+                                    String model, String reasoningEffort) {
+        Map<String, Object> request = new LinkedHashMap<>(Map.of(
                 TranslationConstants.LLM_REQUEST_FIELD_MODEL, model,
-                TranslationConstants.LLM_REQUEST_FIELD_TEMPERATURE, properties.getTemperature(),
-                TranslationConstants.LLM_REQUEST_FIELD_MESSAGES, List.of(
-                        Map.of(TranslationConstants.LLM_REQUEST_FIELD_ROLE, TranslationConstants.LLM_ROLE_SYSTEM,
-                                TranslationConstants.LLM_REQUEST_FIELD_CONTENT, systemPrompt),
+                LlmResponsesConstants.INSTRUCTIONS, systemPrompt,
+                LlmResponsesConstants.STREAM, false,
+                LlmResponsesConstants.STORE, false,
+                LlmResponsesConstants.INPUT, List.of(
                         Map.of(TranslationConstants.LLM_REQUEST_FIELD_ROLE, TranslationConstants.LLM_ROLE_USER,
                                 TranslationConstants.LLM_REQUEST_FIELD_CONTENT, source)
                 )
-        );
+        ));
+        // Responses 使用嵌套 reasoning.effort，不发送聊天补全的 reasoning_effort。
+        if (StringUtils.isNotBlank(reasoningEffort)) {
+            request.put(LlmResponsesConstants.REASONING, Map.of(LlmResponsesConstants.EFFORT, reasoningEffort));
+        } else {
+            request.put(TranslationConstants.LLM_REQUEST_FIELD_TEMPERATURE, properties.getTemperature());
+        }
+        return request;
     }
 
     /**
@@ -124,7 +136,6 @@ public class DokkanLlmTranslationClient {
      */
     private WebClient buildClient(LlmTranslationProperties properties) {
         return WebClient.builder()
-                .baseUrl(stripTrailingSlash(properties.getBaseUrl()))
                 .defaultHeader(HttpHeaders.AUTHORIZATION,
                         TranslationConstants.LLM_AUTHORIZATION_BEARER_PREFIX + properties.getApiKey())
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -132,25 +143,45 @@ public class DokkanLlmTranslationClient {
     }
 
     /**
-     * 从 OpenAI 兼容响应中读取首个候选消息内容和 token 用量。
+     * 从完成的 Responses 响应提取全部助手文本片段及用量，忽略推理项并拒绝不完整输出。
      *
      * @param response LLM 原始 JSON 响应
      * @param model    本次请求使用的模型
      * @return 翻译结果
      */
     private LlmTranslationResultDTO responseResult(String response, String model) {
-        String content = JsonUtils.readFirstArrayObjectText(response,
-                TranslationConstants.LLM_RESPONSE_FIELD_CHOICES,
-                TranslationConstants.LLM_RESPONSE_FIELD_MESSAGE,
-                TranslationConstants.LLM_REQUEST_FIELD_CONTENT);
+        LlmResponsesDTO parsed = JsonUtils.json2Object(response, LlmResponsesDTO.class);
+        if (Objects.isNull(parsed) || !LlmResponsesConstants.COMPLETED.equals(parsed.status())
+                || Objects.isNull(parsed.output())) {
+            throw new IllegalStateException(LlmResponsesConstants.INVALID_RESPONSE);
+        }
+        StringBuilder translatedText = new StringBuilder();
+        // 输出可能先包含推理项，再包含多个消息；只按原顺序组合助手正文。
+        for (LlmResponsesDTO.Output output : parsed.output()) {
+            if (Objects.isNull(output) || !LlmResponsesConstants.MESSAGE.equals(output.type())
+                    || !LlmResponsesConstants.ASSISTANT.equals(output.role()) || Objects.isNull(output.content())) {
+                continue;
+            }
+            for (LlmResponsesDTO.Content part : output.content()) {
+                if (Objects.isNull(part)) {
+                    continue;
+                }
+                if (LlmResponsesConstants.REFUSAL.equals(part.type())) {
+                    throw new IllegalStateException(LlmResponsesConstants.INVALID_RESPONSE);
+                }
+                if (LlmResponsesConstants.OUTPUT_TEXT.equals(part.type()) && Objects.nonNull(part.text())) {
+                    translatedText.append(part.text());
+                }
+            }
+        }
+        String content = translatedText.toString();
         if (StringUtils.isBlank(content)) {
             throw new IllegalStateException(TranslationConstants.LLM_EMPTY_CONTENT_ERROR_MESSAGE);
         }
         LlmTranslationResultDTO result = new LlmTranslationResultDTO();
         result.setModel(model);
         result.setContent(content.trim());
-        result.setUsage(JsonUtils.readObjectField(response, TranslationConstants.LLM_RESPONSE_FIELD_USAGE,
-                LlmTokenUsageDTO.class));
+        result.setUsage(parsed.usage());
         return result;
     }
 
@@ -195,14 +226,4 @@ public class DokkanLlmTranslationClient {
                 || message.contains(TranslationConstants.LLM_QUOTA_ERROR_KEYWORD_QUOTA_CN);
     }
 
-    /**
-     * 去掉 baseUrl 末尾斜杠，避免与接口 path 拼接成双斜杠。
-     *
-     * @param value 原始 baseUrl
-     * @return 规范化后的 baseUrl
-     */
-    private String stripTrailingSlash(String value) {
-        return value.endsWith(TranslationConstants.URL_SLASH)
-                ? value.substring(0, value.length() - TranslationConstants.URL_SLASH.length()) : value;
-    }
 }

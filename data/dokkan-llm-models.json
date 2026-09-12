@@ -1,0 +1,16 @@
+{
+  "snapshotId": "2026-09-12",
+  "timeZone": "Asia/Shanghai",
+  "models": [
+    {"model": "gpt-5.6-luna", "enabled": true, "unlimited": true, "reasoningEffort": "low"},
+    {"model": "qwen3.8-27b", "remainingTokens": 1000000, "expiresOn": "2026-11-17", "enabled": false},
+    {"model": "qwen3.7-flash-2026-07-15", "remainingTokens": 112520, "expiresOn": "2026-10-23", "enabled": false},
+    {"model": "qwen3.8-flash", "remainingTokens": 1000000, "expiresOn": "2026-11-25", "enabled": false},
+    {"model": "kimi-k3", "remainingTokens": 1000000, "expiresOn": "2026-11-17", "enabled": false},
+    {"model": "qwen3.8-max-0902", "remainingTokens": 1000000, "expiresOn": "2026-12-01", "enabled": false},
+    {"model": "kimi-k2.7-code", "remainingTokens": 134710, "expiresOn": "2026-09-14", "enabled": false},
+    {"model": "deepseek-v4-pro-0813", "remainingTokens": 482730, "expiresOn": "2026-11-13", "enabled": false},
+    {"model": "qwen3.8-2.4t-a95b", "remainingTokens": 1000000, "expiresOn": "2026-11-12", "enabled": false},
+    {"model": "qwen3.8-max", "remainingTokens": 1000000, "expiresOn": "2026-11-01", "enabled": false}
+  ]
+}

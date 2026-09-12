@@ -4,7 +4,6 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
 
 /**
  * @Description LLM翻译配置
@@ -19,20 +18,14 @@ public class LlmTranslationProperties {
     /** 是否启用 LLM 翻译，默认关闭以避免未配置密钥时误调用外部接口。 */
     private boolean enabled;
 
-    /** OpenAI 兼容接口 baseUrl，例如 https://api.openai.com/v1。 */
+    /** Responses 完整请求地址，包含 /v1/responses，不再拼接任何后缀。 */
     private String baseUrl;
 
     /** OpenAI 兼容接口 API Key，只允许通过环境变量或本地配置注入。 */
     private String apiKey;
 
-    /** OpenAI 兼容接口模型名称，兼容旧配置并作为模型池首选模型。 */
-    private String model;
-
-    /** OpenAI 兼容接口可切换模型池，按配置顺序参与额度选择。 */
-    private List<String> models = LlmTranslationConfigConstants.DEFAULT_MODELS;
-
-    /** 每个免费模型可用 token 额度。 */
-    private long freeQuotaTokens = LlmTranslationConfigConstants.DEFAULT_FREE_QUOTA_TOKENS;
+    /** 模型、剩余额度、有效期统一从此 JSON 文件加载，启动时生效。 */
+    private String modelConfigFile = LlmTranslationConfigConstants.DEFAULT_MODEL_CONFIG_FILE;
 
     /** LLM 模型 token 用量状态文件路径。 */
     private String usageFile = LlmTranslationConfigConstants.DEFAULT_USAGE_FILE;
@@ -42,9 +35,6 @@ public class LlmTranslationProperties {
 
     /** 单次翻译遇到额度错误时最多切换尝试的模型数量。 */
     private int quotaSwitchMaxAttempts = LlmTranslationConfigConstants.DEFAULT_QUOTA_SWITCH_MAX_ATTEMPTS;
-
-    /** OpenAI 兼容聊天补全接口路径。 */
-    private String chatCompletionsPath = LlmTranslationConfigConstants.DEFAULT_CHAT_COMPLETIONS_PATH;
 
     /** LLM 请求超时时间，单位：秒。 */
     private int timeoutSeconds = LlmTranslationConfigConstants.DEFAULT_TIMEOUT_SECONDS;

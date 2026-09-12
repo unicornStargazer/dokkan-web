@@ -6,6 +6,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -20,6 +21,16 @@ import java.util.Objects;
  **/
 @UtilityClass
 public class DateUtils {
+
+    /**
+     * 严格解析 ISO 日期，非法或缺失日期直接抛错，供额度有效期等不可静默降级场景使用。
+     *
+     * @param value yyyy-MM-dd 日期
+     * @return 本地日期
+     */
+    public static LocalDate parseIsoDate(String value) {
+        return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
+    }
 
     /** 日期格式：年月日。 */
     private static final String DATE_PATTERN = "yyyy-MM-dd";

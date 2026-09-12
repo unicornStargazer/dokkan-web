@@ -1,7 +1,5 @@
 package com.hb.dokkan.config.translation;
 
-import java.util.List;
-
 /**
  * @Description LLM翻译配置常量
  * @Author stargazer
@@ -9,45 +7,23 @@ import java.util.List;
  **/
 public final class LlmTranslationConfigConstants {
 
-    /** OpenAI 兼容接口默认聊天补全路径。 */
-    public static final String DEFAULT_CHAT_COMPLETIONS_PATH = "/chat/completions";
-
     /** LLM 翻译默认请求超时时间，单位：秒。 */
     public static final int DEFAULT_TIMEOUT_SECONDS = 60;
 
     /** LLM 翻译默认温度，较低温度用于保证翻译结果稳定。 */
     public static final double DEFAULT_TEMPERATURE = 0.1D;
 
-    /** LLM 免费模型默认 token 额度。 */
-    public static final long DEFAULT_FREE_QUOTA_TOKENS = 1_000_000L;
-
     /** LLM 模型用量默认持久化文件。 */
     public static final String DEFAULT_USAGE_FILE = "./data/dokkan-llm-model-usage.json";
+
+    /** 外置模型额度快照文件；相对于后端工作目录。 */
+    public static final String DEFAULT_MODEL_CONFIG_FILE = "./data/dokkan-llm-models.json";
 
     /** LLM 单次翻译默认预估输出 token 数。 */
     public static final long DEFAULT_ESTIMATED_COMPLETION_TOKENS = 2_000L;
 
     /** LLM 遇到额度错误时默认最大模型切换尝试次数。 */
     public static final int DEFAULT_QUOTA_SWITCH_MAX_ATTEMPTS = 12;
-
-    /** LLM 默认可切换免费模型池，按用户提供顺序排列。 */
-    public static final List<String> DEFAULT_MODELS = List.of(
-            "qwen3.7-max-2026-05-20",
-            "qwen3.7-max",
-            "qwen3.7-max-2026-05-17",
-            "qwen3.7-max-preview",
-            "qwen3.7-plus-2026-05-26",
-            "qwen3.7-max-2026-05-20",
-            "qwen3.7-flash-2026-07-15",
-            "qwen3.7-plus",
-            "qwen3.7-max-2026-06-08",
-            "glm-5.2",
-            "kimi-k2.7-code",
-            "deepseek-v4-flash-0731",
-            "qwen3.8-2.4t-a95b",
-            "qwen3.8-max",
-            "deepseek-v4-pro-0813"
-    );
 
     /** LLM 默认 system prompt，约束模型按卡片队长技、被动技、必杀技等模板输出自然简体中文。 */
     public static final String DEFAULT_SYSTEM_PROMPT = """

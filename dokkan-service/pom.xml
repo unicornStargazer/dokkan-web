@@ -12,6 +12,11 @@
     <artifactId>dokkan-service</artifactId>
 
     <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!--内部依赖  start-->
         <dependency>
             <groupId>com.hb.dokkan</groupId>

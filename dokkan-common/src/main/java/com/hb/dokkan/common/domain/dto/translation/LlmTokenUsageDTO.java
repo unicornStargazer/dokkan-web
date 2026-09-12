@@ -2,6 +2,7 @@ package com.hb.dokkan.common.domain.dto.translation;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -20,10 +21,12 @@ public class LlmTokenUsageDTO implements Serializable {
 
     /** 输入 prompt 消耗的 token 数。 */
     @JsonProperty("prompt_tokens")
+    @JsonAlias("input_tokens")
     private long promptTokens;
 
     /** 输出 completion 消耗的 token 数。 */
     @JsonProperty("completion_tokens")
+    @JsonAlias("output_tokens")
     private long completionTokens;
 
     /** 本次请求总消耗 token 数。 */

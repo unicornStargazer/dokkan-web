@@ -129,7 +129,7 @@ public class DokkanLlmTranslationService {
     }
 
     /**
-     * 按模型余额智能选择模型并在额度不足时自动切换。
+     * 优先使用临近到期模型并在额度不足时自动切换，始终释放请求预占额度。
      *
      * @param source       待翻译文本
      * @param systemPrompt 本次翻译使用的 system prompt
@@ -151,15 +151,21 @@ public class DokkanLlmTranslationService {
                         selection.estimatedTotalTokens(), attempt + 1, maxAttempts);
                 // 外部接口调用由 Client 统一封装 HTTP、异常和响应解析。
                 LlmTranslationResultDTO result = llmTranslationClient.translate(source, systemPrompt, properties,
-                        selection.model());
+                        selection.model(), llmModelQuotaService.reasoningEffort(selection.model()));
                 llmModelQuotaService.recordSuccess(selection.model(), result.getUsage(), estimate);
                 return result.getContent();
             } catch (LlmModelQuotaExceededException e) {
+                llmModelQuotaService.recordFailure(selection.model());
                 lastException = e;
                 // 当前模型额度不足时标记耗尽并继续尝试下一个余额可用模型。
                 llmModelQuotaService.markQuotaExceeded(selection.model(), e.getMessage());
                 log.warn("LLM model quota switch triggered, model:{}, attemptedModels:{}",
                         selection.model(), attemptedModels, e);
+            } catch (RuntimeException e) {
+                llmModelQuotaService.recordFailure(selection.model());
+                throw e;
+            } finally {
+                llmModelQuotaService.releaseReservation(selection.model(), estimate);
             }
         }
         throw Objects.isNull(lastException)
