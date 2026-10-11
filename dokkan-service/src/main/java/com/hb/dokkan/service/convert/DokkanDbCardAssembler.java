@@ -15,6 +15,7 @@ import com.hb.dokkan.common.domain.dto.data.wiki.WikiSpecialAttackDTO;
 import com.hb.dokkan.common.utils.DateUtils;
 import com.hb.dokkan.service.translation.DokkanLlmTranslationService;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -34,6 +35,7 @@ import java.util.function.Function;
  * @Date 2026/8/15 19:30
  **/
 @Service
+@Slf4j
 public class DokkanDbCardAssembler {
 
     @Resource
@@ -75,7 +77,7 @@ public class DokkanDbCardAssembler {
         card.setDefValue(stats == null ? null : stats.getDefMax());
         card.setLeaderSkillSetId(source.getLeaderSkillSetId());
         card.setLeaderSkill(translate.apply(source.getLeaderSkill()));
-        card.setPassiveSkillSetId(source.getPassiveSkillSetId());
+        card.setPassiveSkillSetId(resolvePassiveSkillId(source));
         card.setPassiveSkillName(translate.apply(source.getPassiveSkillName()));
         card.setPassiveSkillDesc(translate.apply(source.getPassiveSkillDescription()));
         card.setActiveSkillId(source.getActiveSkillSetId());
@@ -233,15 +235,44 @@ public class DokkanDbCardAssembler {
             return Collections.emptyList();
         }
         List<WikiEzaCardDTO> result = new ArrayList<>();
-        if (card.getStep() >= TranslationConstants.EZA_PRE_STEP_THRESHOLD && card.getStepPre() != null) {
-            result.add(eza(card, stats, translate, card.getStepPre(), card.getEzaLeaderSkillSetIdPre(),
-                    card.getEzaLeaderSkillPre(), card.getEzaPassiveSkillSetIdPre(),
-                    card.getEzaPassiveSkillNamePre(), card.getEzaPassiveSkillDescriptionPre()));
-        }
         result.add(eza(card, stats, translate, card.getStep(), card.getEzaLeaderSkillSetId(),
-                card.getEzaLeaderSkill(), card.getEzaPassiveSkillSetId(),
+                card.getEzaLeaderSkill(), resolveEzaPassiveSkillId(card),
                 card.getEzaPassiveSkillName(), card.getEzaPassiveSkillDescription()));
         return result;
+    }
+
+    /**
+     * 解析普通卡片被动技能 ID，优先使用单值字段，缺失时回退到数组首项。
+     *
+     * @param card DokkanDB 卡片响应
+     * @return 被动技能 ID，均缺失时返回 null
+     */
+    private Long resolvePassiveSkillId(DokkanDbCardDTO card) {
+        Long passiveSkillId = card.getPassiveSkillSetId();
+        if (passiveSkillId == null) {
+            passiveSkillId = first(card.getPassiveIds());
+        }
+        if (passiveSkillId == null) {
+            log.error("DokkanDB passive skill id missing, cardId:{}", card.getId());
+        }
+        return passiveSkillId;
+    }
+
+    /**
+     * 解析当前最新极限阶段的被动技能 ID，优先使用 EZA 单值字段，缺失时回退到数组首项。
+     *
+     * @param card DokkanDB 卡片响应
+     * @return 极限被动技能 ID，均缺失时返回 null
+     */
+    private Integer resolveEzaPassiveSkillId(DokkanDbCardDTO card) {
+        Integer passiveSkillId = card.getEzaPassiveSkillSetId();
+        if (passiveSkillId == null) {
+            passiveSkillId = first(card.getPassiveIdsEza());
+        }
+        if (passiveSkillId == null) {
+            log.error("DokkanDB EZA passive skill id missing, cardId:{}", card.getId());
+        }
+        return passiveSkillId;
     }
 
     /**
@@ -448,6 +479,17 @@ public class DokkanDbCardAssembler {
      */
     private <T> T at(List<T> values, int index) {
         return values == null || index < 0 || index >= values.size() ? null : values.get(index);
+    }
+
+    /**
+     * 获取列表首项，空列表返回 null。
+     *
+     * @param values 候选 ID 列表
+     * @param <T>    列表元素类型
+     * @return 列表首项或 null
+     */
+    private <T> T first(List<T> values) {
+        return CollectionUtils.isEmpty(values) ? null : values.get(0);
     }
 
     /**

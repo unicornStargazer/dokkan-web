@@ -28,6 +28,13 @@ public class DokkanLlmTranslationClientTest {
                       "output_tokens_details":{"reasoning_tokens":10}}}
             """;
 
+    /** 批量协议响应样例。 */
+    private static final String BATCH_COMPLETED_RESPONSE = """
+            {"status":"completed","output":[{"type":"message","role":"assistant","content":[
+            {"type":"output_text","text":"[\\"第一条译文\\",\\"第二条译文\\"]"}]}],
+            "usage":{"input_tokens":40,"output_tokens":20,"total_tokens":60}}
+            """;
+
     /** 固定模型与低思考参数原样发送，不附加本地输出 token 限制或采样参数。 */
     @Test
     public void sendsLowReasoningWithoutTokenCapOrTemperature() {
@@ -122,6 +129,35 @@ public class DokkanLlmTranslationClientTest {
             assertEquals(20L, result.getUsage().getPromptTokens());
             assertEquals(30L, result.getUsage().getCompletionTokens());
             assertEquals(50L, result.getUsage().getTotalTokens());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /** 批量请求只发一次，并按输入顺序读取多条译文。 */
+    @Test
+    public void translatesBatchInOneRequest() throws Exception {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] body = BATCH_COMPLETED_RESPONSE.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        try {
+            LlmTranslationProperties properties = new LlmTranslationProperties();
+            properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort() + "/v1/responses");
+            properties.setApiKey("local-test-key");
+            DokkanLlmTranslationClient.BatchTranslationResult result = new DokkanLlmTranslationClient()
+                    .translateBatch(java.util.List.of("first", "second"), "prompt", properties,
+                            "gpt-5.6-luna", "low");
+            assertEquals(java.util.List.of("第一条译文", "第二条译文"), result.contents());
+            assertTrue(requestBody.get().contains("\\\"index\\\":0"));
+            assertTrue(requestBody.get().contains("\\\"index\\\":1"));
         } finally {
             server.stop(0);
         }

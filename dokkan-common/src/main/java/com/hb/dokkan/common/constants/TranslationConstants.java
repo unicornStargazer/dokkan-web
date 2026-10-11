@@ -248,6 +248,20 @@ public final class TranslationConstants {
     /** LLM 翻译最大并发许可数，避免批量重翻时压垮外部模型服务。 */
     public static final int LLM_MAX_CONCURRENCY_PERMITS = 5;
 
+    /** 单次 Responses 请求最多翻译的文本条数，避免批量输出过长。 */
+    public static final int LLM_BATCH_MAX_TEXTS = 20;
+
+    /** 单次 Responses 请求原文最大字符数，超过后拆分为下一批。 */
+    public static final int LLM_BATCH_MAX_SOURCE_CHARS = 12_000;
+
+    /** 批量翻译协议，要求模型按输入顺序返回 JSON 字符串数组。 */
+    public static final String LLM_BATCH_PROMPT_INSTRUCTION = """
+            The user input is a JSON array of objects with index and text fields.
+            Translate every text item in order and return only a valid JSON string array.
+            The output array must have exactly the same length and order as the input array.
+            Do not return markdown fences, explanations, object keys, or any other text.
+            """;
+
     /** LLM 并发等待被中断时的错误提示。 */
     public static final String LLM_CONCURRENCY_INTERRUPTED_ERROR_MESSAGE = "LLM translation concurrency interrupted";
 

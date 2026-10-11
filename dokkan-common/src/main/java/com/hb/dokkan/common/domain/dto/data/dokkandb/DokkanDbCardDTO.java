@@ -29,6 +29,8 @@ public class DokkanDbCardDTO {
     private String leaderSkill;
     @JsonProperty("passive_skill_set_id")
     private Long passiveSkillSetId;
+    @JsonProperty("passive_ids")
+    private List<Long> passiveIds;
     @JsonProperty("passive_skill_name")
     private String passiveSkillName;
     @JsonProperty("passive_skill_description")
@@ -102,6 +104,8 @@ public class DokkanDbCardDTO {
     private String ezaLeaderSkill;
     @JsonProperty("eza_passive_skill_set_id")
     private Integer ezaPassiveSkillSetId;
+    @JsonProperty("passive_ids_eza")
+    private List<Integer> passiveIdsEza;
     @JsonProperty("eza_passive_skill_name")
     private String ezaPassiveSkillName;
     @JsonProperty("eza_passive_skill_description")

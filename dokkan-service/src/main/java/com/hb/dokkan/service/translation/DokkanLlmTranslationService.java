@@ -79,9 +79,9 @@ public class DokkanLlmTranslationService {
         // 先做业务配置校验，避免未启用或缺配置时请求外部接口。
         checkConfig();
         // 根据页面维护映射与本地分类英文名构建动态术语表，保证技能文本中的专有名词稳定。
-        String systemPrompt = buildSystemPromptWithGlossary();
+        String systemPrompt = buildBatchSystemPromptWithGlossary();
         // 按模型剩余额度选择可用模型，并在额度不足时自动切换重试。
-        return translateWithModelSwitch(source, systemPrompt);
+        return translateWithModelSwitch(List.of(source), systemPrompt).targets().getFirst();
     }
 
     /**
@@ -94,24 +94,35 @@ public class DokkanLlmTranslationService {
         if (Objects.isNull(sourceTexts) || sourceTexts.isEmpty()) {
             return Collections.emptyList();
         }
+        checkConfig();
         long startTime = System.currentTimeMillis();
         List<String> orderedTexts = new ArrayList<>(sourceTexts);
         List<String> distinctTexts = orderedTexts.stream()
                 .filter(StringUtils::isNotBlank)
                 .distinct()
                 .toList();
+        if (distinctTexts.isEmpty()) {
+            return orderedTexts;
+        }
         int permits = llmConcurrencyPermits();
         log.info("LLM batch translate started, textCount:{}, distinctCount:{}, concurrency:{}",
                 orderedTexts.size(), distinctTexts.size(), permits);
-        List<CompletableFuture<TranslationResult>> futures = distinctTexts.stream()
-                .map(text -> CompletableFuture.supplyAsync(() -> translateWithPermit(text), dokkanExecutor))
+        String systemPrompt = buildBatchSystemPromptWithGlossary();
+        List<List<String>> batches = partitionTexts(distinctTexts);
+        List<CompletableFuture<BatchTranslationResult>> futures = batches.stream()
+                .map(batch -> CompletableFuture.supplyAsync(
+                        () -> translateWithPermit(batch, systemPrompt), dokkanExecutor))
                 .toList();
         Map<String, String> translatedValues = new LinkedHashMap<>();
         futures.stream()
-                .map(this::joinTranslationResult)
-                .forEach(result -> translatedValues.put(result.source(), result.target()));
-        log.info("LLM batch translate completed, textCount:{}, distinctCount:{}, costMs:{}",
-                orderedTexts.size(), distinctTexts.size(), System.currentTimeMillis() - startTime);
+                .map(this::joinBatchTranslationResult)
+                .forEach(result -> {
+                    for (int index = 0; index < result.sources().size(); index++) {
+                        translatedValues.put(result.sources().get(index), result.targets().get(index));
+                    }
+                });
+        log.info("LLM batch translate completed, textCount:{}, distinctCount:{}, requestCount:{}, costMs:{}",
+                orderedTexts.size(), distinctTexts.size(), batches.size(), System.currentTimeMillis() - startTime);
         return orderedTexts.stream()
                 .map(text -> StringUtils.isBlank(text) ? text : translatedValues.getOrDefault(text, text))
                 .toList();
@@ -135,8 +146,9 @@ public class DokkanLlmTranslationService {
      * @param systemPrompt 本次翻译使用的 system prompt
      * @return 翻译后的文本
      */
-    private String translateWithModelSwitch(String source, String systemPrompt) {
-        DokkanLlmModelQuotaService.TokenEstimate estimate = llmModelQuotaService.estimate(source, systemPrompt);
+    private BatchTranslationResult translateWithModelSwitch(List<String> sources, String systemPrompt) {
+        String estimateSource = String.join(TranslationConstants.BATCH_ROW_SEPARATOR, sources);
+        DokkanLlmModelQuotaService.TokenEstimate estimate = llmModelQuotaService.estimate(estimateSource, systemPrompt);
         List<String> attemptedModels = new ArrayList<>();
         int maxAttempts = Math.min(Math.max(properties.getQuotaSwitchMaxAttempts(),
                 TranslationConstants.LLM_MIN_CONCURRENCY_PERMITS), llmModelQuotaService.modelCount());
@@ -150,10 +162,11 @@ public class DokkanLlmTranslationService {
                         selection.model(), selection.remainingTokens(), selection.estimatedPromptTokens(),
                         selection.estimatedTotalTokens(), attempt + 1, maxAttempts);
                 // 外部接口调用由 Client 统一封装 HTTP、异常和响应解析。
-                LlmTranslationResultDTO result = llmTranslationClient.translate(source, systemPrompt, properties,
-                        selection.model(), llmModelQuotaService.reasoningEffort(selection.model()));
-                llmModelQuotaService.recordSuccess(selection.model(), result.getUsage(), estimate);
-                return result.getContent();
+                DokkanLlmTranslationClient.BatchTranslationResult result = llmTranslationClient.translateBatch(
+                        sources, systemPrompt, properties, selection.model(),
+                        llmModelQuotaService.reasoningEffort(selection.model()));
+                llmModelQuotaService.recordSuccess(selection.model(), result.usage(), estimate);
+                return new BatchTranslationResult(sources, result.contents());
             } catch (LlmModelQuotaExceededException e) {
                 llmModelQuotaService.recordFailure(selection.model());
                 lastException = e;
@@ -179,18 +192,18 @@ public class DokkanLlmTranslationService {
      * @param source 待翻译文本
      * @return 翻译结果
      */
-    private TranslationResult translateWithPermit(String source) {
+    private BatchTranslationResult translateWithPermit(List<String> sources, String systemPrompt) {
         boolean acquired = false;
         try {
             llmSemaphore.acquire();
             acquired = true;
-            // 单条翻译复用现有 LLM prompt、动态术语表和 client 封装，避免批量响应错位。
-            return new TranslationResult(source, translate(source));
+            // 同一批文本复用一份 prompt，并由 Client 校验返回数量与顺序，避免批量响应错位。
+            return translateWithModelSwitch(sources, systemPrompt);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(TranslationConstants.LLM_CONCURRENCY_INTERRUPTED_ERROR_MESSAGE, e);
         } catch (Exception e) {
-            log.error("LLM batch translate failed, text length:{}", StringUtils.length(source), e);
+            log.error("LLM batch translate failed, textCount:{}", sources.size(), e);
             throw e;
         } finally {
             if (acquired) {
@@ -205,7 +218,7 @@ public class DokkanLlmTranslationService {
      * @param future 翻译 Future
      * @return 翻译结果
      */
-    private TranslationResult joinTranslationResult(CompletableFuture<TranslationResult> future) {
+    private BatchTranslationResult joinBatchTranslationResult(CompletableFuture<BatchTranslationResult> future) {
         try {
             return future.join();
         } catch (CompletionException e) {
@@ -250,6 +263,35 @@ public class DokkanLlmTranslationService {
                 + terms;
     }
 
+    /** 构建批量翻译 prompt；协议约束只构建一次并复用于当前批次。 */
+    private String buildBatchSystemPromptWithGlossary() {
+        return buildSystemPromptWithGlossary()
+                + TranslationConstants.LLM_PROMPT_SECTION_SEPARATOR
+                + TranslationConstants.LLM_BATCH_PROMPT_INSTRUCTION;
+    }
+
+    /** 按条数和原文长度拆分文本，避免大批量请求超过中转或模型上下文限制。 */
+    private List<List<String>> partitionTexts(List<String> texts) {
+        List<List<String>> batches = new ArrayList<>();
+        List<String> current = new ArrayList<>();
+        int currentLength = 0;
+        for (String text : texts) {
+            int textLength = StringUtils.length(text);
+            if (!current.isEmpty() && (current.size() >= TranslationConstants.LLM_BATCH_MAX_TEXTS
+                    || currentLength + textLength > TranslationConstants.LLM_BATCH_MAX_SOURCE_CHARS)) {
+                batches.add(List.copyOf(current));
+                current.clear();
+                currentLength = 0;
+            }
+            current.add(text);
+            currentLength += textLength;
+        }
+        if (!current.isEmpty()) {
+            batches.add(List.copyOf(current));
+        }
+        return batches;
+    }
+
     /**
      * 根据页面维护映射和本地分类中英文名称构建运行期术语表。
      *
@@ -289,6 +331,6 @@ public class DokkanLlmTranslationService {
      * @param source 原文
      * @param target 译文
      */
-    private record TranslationResult(String source, String target) {
+    private record BatchTranslationResult(List<String> sources, List<String> targets) {
     }
 }

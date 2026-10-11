@@ -24,6 +24,10 @@ public final class LlmResponsesConstants {
     public static final String OUTPUT_TEXT = "output_text";
     /** 模型拒绝类型。 */
     public static final String REFUSAL = "refusal";
+    /** 批量输入序号字段。 */
+    public static final String BATCH_INPUT_INDEX = "index";
+    /** 批量输入原文字段。 */
+    public static final String BATCH_INPUT_TEXT = "text";
     /** 未完成或拒绝响应的统一错误，不包含上游正文及密钥。 */
     public static final String INVALID_RESPONSE = "LLM Responses response not completed or refused";
 
