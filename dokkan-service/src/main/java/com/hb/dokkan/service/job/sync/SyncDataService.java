@@ -779,36 +779,6 @@ public class SyncDataService {
     }
 
     /**
-     * EZA-only 更新时保留已有扩展属性，同时保留本次同步得到的变身关系。
-     *
-     * @param incomingAttributes 外部同步属性 JSON
-     * @param existingAttributes 数据库已有属性 JSON
-     * @return 合并后的属性 JSON
-     */
-    private String mergeTransformationAttributes(String incomingAttributes, String existingAttributes) {
-        if (StringUtils.isBlank(existingAttributes)) {
-            return incomingAttributes;
-        }
-        if (StringUtils.isBlank(incomingAttributes)) {
-            return existingAttributes;
-        }
-        try {
-            CardBaseInfoAttribute incoming = JsonUtils.json2Object(incomingAttributes, CardBaseInfoAttribute.class);
-            CardBaseInfoAttribute existing = JsonUtils.json2Object(existingAttributes, CardBaseInfoAttribute.class);
-            if (Objects.isNull(incoming) || Objects.isNull(existing)) {
-                return existingAttributes;
-            }
-            if (!CollectionUtils.isEmpty(incoming.getNextCards())) {
-                existing.setNextCards(incoming.getNextCards());
-            }
-            return JsonUtils.object2Json(existing);
-        } catch (Exception e) {
-            log.warn("merge transformation attributes failed", e);
-            return existingAttributes;
-        }
-    }
-
-    /**
      * 写入下拉技能数据，已有记录保留本地化字段。
      *
      * @param downPullSkills          下拉技能同步数据
@@ -871,52 +841,61 @@ public class SyncDataService {
                         cardModel.stream().map(CardPO::getCardId).toList())
                 .stream().collect(Collectors.toMap(CardPO::getCardId, Function.identity(),
                         (oldValue, newValue) -> oldValue));
+        List<CardPO> cardsToPersist = new ArrayList<>();
         cardModel.forEach(card -> {
             CardPO existing = existingCards.get(card.getCardId());
+            if (isExistingEzaOnlySyncCard(card, existing, ezaSyncCardIds)) {
+                // EZA 数据属于 eza_card，已有主卡不执行无意义的 card 表更新。
+                return;
+            }
             card.setId(existing == null ? null : existing.getId());
-            if (preserveLocalizedFields && isExistingEzaSyncCard(card, existing, ezaSyncCardIds)) {
-                preserveExistingCardFields(card, existing);
-            } else if (preserveLocalizedFields) {
+            if (preserveLocalizedFields) {
                 preserveExistingLocalizedFields(card, existing);
             } else if (existing != null && card.getCost() == null) {
                 card.setCost(existing.getCost());
             }
+            cardsToPersist.add(card);
         });
-        saveOrUpdateByKnownId(cardRepository, cardModel, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
+        log.info("card base persistence prepared, incomingCards:{}, persistedCards:{}, skippedExistingEzaCards:{}",
+                cardModel.size(), cardsToPersist.size(), cardModel.size() - cardsToPersist.size());
+        saveOrUpdateByKnownId(cardRepository, cardsToPersist, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
     }
 
     /**
-     * 判断当前记录是否为已有 EZA 同步卡片。
+     * 判断当前记录是否为已有纯 EZA 卡片。
+     *
+     * 变身后的卡可能同时包含 EZA 数据，但它的普通卡片详情仍需写入 card 表，
+     * 因此只有没有变身关系的 EZA 卡才跳过主表更新。
      *
      * @param incoming       即将写入的卡片记录
      * @param existing       数据库已有卡片记录
      * @param ezaSyncCardIds 本次同步包含 EZA 数据的卡片 ID
      * @return 是否为已有 EZA 同步卡片
      */
-    private boolean isExistingEzaSyncCard(CardPO incoming, CardPO existing, Set<Long> ezaSyncCardIds) {
+    private boolean isExistingEzaOnlySyncCard(CardPO incoming, CardPO existing, Set<Long> ezaSyncCardIds) {
         return Objects.nonNull(existing) && Objects.nonNull(incoming)
-                && !CollectionUtils.isEmpty(ezaSyncCardIds) && ezaSyncCardIds.contains(incoming.getCardId());
+                && !CollectionUtils.isEmpty(ezaSyncCardIds) && ezaSyncCardIds.contains(incoming.getCardId())
+                && !hasTransformationData(incoming);
     }
 
     /**
-     * EZA-only 更新时保留主表所有既有字段，只补主键参与批量更新。
+     * 判断卡片基础属性中是否携带变身关系。
      *
-     * @param incoming 即将写入的卡片记录
-     * @param existing 数据库已有卡片记录
+     * @param card 卡片基础持久化对象
+     * @return true 表示当前同步包含变身卡详情
      */
-    private void preserveExistingCardFields(CardPO incoming, CardPO existing) {
-        incoming.setCardId(existing.getCardId());
-        incoming.setCardName(existing.getCardName());
-        incoming.setTitle(existing.getTitle());
-        incoming.setType(existing.getType());
-        incoming.setPropType(existing.getPropType());
-        incoming.setCost(existing.getCost());
-        incoming.setRarity(existing.getRarity());
-        incoming.setHpValue(existing.getHpValue());
-        incoming.setDefValue(existing.getDefValue());
-        incoming.setAtkValue(existing.getAtkValue());
-        incoming.setPublishTime(existing.getPublishTime());
-        incoming.setAttributes(mergeTransformationAttributes(incoming.getAttributes(), existing.getAttributes()));
+    private boolean hasTransformationData(CardPO card) {
+        if (Objects.isNull(card) || StringUtils.isBlank(card.getAttributes())) {
+            return false;
+        }
+        try {
+            CardBaseInfoAttribute attributes = JsonUtils.json2Object(
+                    card.getAttributes(), CardBaseInfoAttribute.class);
+            return Objects.nonNull(attributes) && !CollectionUtils.isEmpty(attributes.getNextCards());
+        } catch (Exception e) {
+            log.warn("parse card transformation attributes failed, cardId:{}", card.getCardId(), e);
+            return false;
+        }
     }
 
     /**
