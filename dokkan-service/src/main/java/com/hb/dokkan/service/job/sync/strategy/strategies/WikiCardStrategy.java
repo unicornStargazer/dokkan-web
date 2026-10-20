@@ -3,6 +3,7 @@ package com.hb.dokkan.service.job.sync.strategy.strategies;
 import com.google.common.collect.Lists;
 import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
 import com.hb.dokkan.common.domain.dto.data.dokkandb.DokkanDbCardDTO;
+import com.hb.dokkan.service.facade.DokkanDbFacade.CardSourceData;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardDTO;
 import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
 import com.hb.dokkan.common.domain.po.mysql.cards.EzaCardPO;
@@ -18,7 +19,6 @@ import com.hb.dokkan.service.job.sync.SyncProgressContext;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
-import com.hb.dokkan.service.translation.DokkanTranslationService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -69,9 +69,6 @@ public class WikiCardStrategy implements WikiInfoStrategy {
     @Resource
     private WikiCardFilter cardFilter;
 
-    @Resource
-    private DokkanTranslationService translationService;
-
 
     /**
      * 是否匹配
@@ -109,12 +106,6 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                     .stream().collect(Collectors.groupingBy(EzaCardPO::getCardId));
             // 变身卡需要独立拉取，才能同时发现变身卡新增的极限阶段。
             List<Long> transformationIds = collectTransformationCardIds(filteredCatalog);
-            filteredCatalog.forEach(source -> {
-                CardPO existing = existingCards.get(source.getId());
-                if (existing == null) return;
-                translationService.registerTrustedTerm(source.getName(), existing.getCardName());
-                translationService.registerTrustedTerm(source.getTitle(), existing.getTitle());
-            });
             Set<Long> candidateCardIds = filteredCatalog.stream()
                     .filter(card -> isNewOrUpdated(card, existingCards.get(card.getId()), existingEzaCards.get(card.getId())))
                     .map(DokkanDbCardDTO::getId)
@@ -137,7 +128,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
 
                 log.info("处理器:{} 批, 数量:{}", (i / batchSize + 1), batchCardIds.size());
 
-                    List<CompletableFuture<WikiCardDTO>> completableFutures = batchCardIds.stream()
+                    List<CompletableFuture<CardSourceData>> completableFutures = batchCardIds.stream()
                         // CompletableFuture进行并行编排指定自定义的线程池
                         .map(cardId -> CompletableFuture
                                 .supplyAsync(() -> {
@@ -145,7 +136,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                                     try{
                                         semaphore.acquire();
                                         acquired = true;
-                                        return dokkanDbFacade.getCard(cardId);
+                                        return dokkanDbFacade.fetchCardSource(cardId);
                                     }catch (Exception e) {
                                         log.error("获取卡片异常 cardId:{}", cardId, e);
                                         errorIds.add(cardId);
@@ -157,12 +148,13 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                                     }
                                 }, dokkanThreadPoolExecutor))
                         .toList();
-                List<WikiCardDTO> batchResult = CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[0]))
+                List<CardSourceData> fetchedCards = CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[0]))
                         .thenApply(v -> completableFutures.stream()
                                 .map(CompletableFuture::join)
                                 .filter(Objects::nonNull)
                                 .toList())
                         .join();
+                List<WikiCardDTO> batchResult = dokkanDbFacade.assembleCards(fetchedCards, false);
                 allResult.addAll(batchResult);
                 int processed = endIndex;
                 int percent = 12 + Math.round(processed * 48f / Math.max(cardIds.size(), 1));

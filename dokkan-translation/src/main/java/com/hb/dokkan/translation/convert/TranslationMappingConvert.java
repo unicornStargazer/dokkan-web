@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.convert;
+package com.hb.dokkan.translation.convert;
 
 import com.hb.dokkan.common.domain.po.mysql.translation.TranslationMappingPO;
 import com.hb.dokkan.common.domain.request.translation.TranslationMappingSaveRequest;

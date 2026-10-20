@@ -13,7 +13,13 @@ import com.hb.dokkan.common.domain.dto.data.wiki.WikiEzaCardDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiSkillDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiSpecialAttackDTO;
 import com.hb.dokkan.common.utils.DateUtils;
-import com.hb.dokkan.service.translation.DokkanLlmTranslationService;
+import com.hb.dokkan.translation.BusinessTranslationService;
+import com.hb.dokkan.translation.domain.TranslationBatchRequest;
+import com.hb.dokkan.translation.domain.CardTextType;
+import com.hb.dokkan.translation.domain.TranslationItem;
+import com.hb.dokkan.translation.domain.TranslationItemResult;
+import com.hb.dokkan.translation.domain.TranslationProviderType;
+import com.hb.dokkan.translation.domain.TranslationScene;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -27,7 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * @Description DokkanDB卡片转换器
@@ -39,7 +45,7 @@ import java.util.function.Function;
 public class DokkanDbCardAssembler {
 
     @Resource
-    private DokkanLlmTranslationService llmTranslationService;
+    private BusinessTranslationService translationService;
 
     /**
      * 将 DokkanDB 卡片和数值响应转换为现有 wiki 持久化模型。
@@ -61,13 +67,70 @@ public class DokkanDbCardAssembler {
      * @return wiki 卡片模型
      */
     public WikiCardDTO assemble(DokkanDbCardDTO source, DokkanDbCardStatsDTO stats, boolean forceRetranslate) {
-        // 卡片文本统一走 LLM 模板翻译链路，避免普通翻译缓存影响译文质量。
-        Function<String, String> translate = translatorFor(source, forceRetranslate);
+        return assembleAll(List.of(source), Collections.singletonList(stats), forceRetranslate).getFirst();
+    }
+
+    /**
+     * 跨卡收集文本并通过统一入口批量翻译，再按卡片和文本位置恢复组装结果。
+     *
+     * @param cards            卡片详情
+     * @param stats            与卡片顺序对应的数值数据
+     * @param forceRetranslate 是否绕过 mapping/cache 强制翻译
+     * @return 与输入卡片顺序对应的 wiki 卡片模型
+     */
+    public List<WikiCardDTO> assembleAll(List<DokkanDbCardDTO> cards, List<DokkanDbCardStatsDTO> stats,
+                                         boolean forceRetranslate) {
+        if (CollectionUtils.isEmpty(cards)) {
+            return Collections.emptyList();
+        }
+        List<TranslationItem> items = new ArrayList<>();
+        List<List<CardText>> cardTexts = new ArrayList<>(cards.size());
+        for (int cardIndex = 0; cardIndex < cards.size(); cardIndex++) {
+            List<CardText> texts = collectTranslationTexts(cards.get(cardIndex));
+            cardTexts.add(texts);
+            for (int textIndex = 0; textIndex < texts.size(); textIndex++) {
+                CardText text = texts.get(textIndex);
+                items.add(new TranslationItem(translationKey(cardIndex, textIndex), text.sourceText(), text.type()));
+            }
+        }
+        List<TranslationItemResult> translations = translationService.translate(new TranslationBatchRequest(
+                TranslationScene.CARD_TEXT, TranslationProviderType.LLM, items, forceRetranslate));
+        Map<String, String> translatedByKey = new LinkedHashMap<>();
+        translations.forEach(result -> translatedByKey.put(result.key(),
+                result.status() == TranslationItemResult.Status.SUCCESS
+                        ? result.translatedText() : result.sourceText()));
+        List<WikiCardDTO> assembled = new ArrayList<>(cards.size());
+        for (int cardIndex = 0; cardIndex < cards.size(); cardIndex++) {
+            int currentCardIndex = cardIndex;
+            List<CardText> texts = cardTexts.get(cardIndex);
+            Map<CardText, String> cardTranslations = new LinkedHashMap<>();
+            for (int textIndex = 0; textIndex < texts.size(); textIndex++) {
+                cardTranslations.put(texts.get(textIndex), translatedByKey.getOrDefault(
+                        translationKey(currentCardIndex, textIndex), texts.get(textIndex).sourceText()));
+            }
+            BiFunction<CardTextType, String, String> translate = (type, value) -> StringUtils.isBlank(value) ? value
+                    : cardTranslations.getOrDefault(new CardText(type, value), value);
+            DokkanDbCardStatsDTO cardStats = stats != null && cardIndex < stats.size() ? stats.get(cardIndex) : null;
+            assembled.add(assembleTranslated(cards.get(cardIndex), cardStats, translate));
+        }
+        return assembled;
+    }
+
+    /**
+     * 使用已完成的文本翻译结果组装卡片数据。
+     *
+     * @param source    DokkanDB 卡片
+     * @param stats     DokkanDB 卡片数值
+     * @param translate 原文到译文的映射函数
+     * @return wiki 卡片模型
+     */
+    private WikiCardDTO assembleTranslated(DokkanDbCardDTO source, DokkanDbCardStatsDTO stats,
+                                           BiFunction<CardTextType, String, String> translate) {
         // 组装基础卡片信息，保持现有 wiki 持久化结构不变。
         WikiCardBaseInfoDTO card = new WikiCardBaseInfoDTO();
         card.setId(source.getId());
-        card.setName(translate.apply(source.getName()));
-        card.setTitle(translate.apply(source.getTitle()));
+        card.setName(translate.apply(CardTextType.CHARACTER_NAME, source.getName()));
+        card.setTitle(translate.apply(CardTextType.TITLE, source.getTitle()));
         card.setRarity(source.getRarity());
         card.setPropType(source.getElement());
         card.setCost(estimateCost(source));
@@ -76,14 +139,14 @@ public class DokkanDbCardAssembler {
         card.setAtkValue(stats == null ? null : stats.getAtkMax());
         card.setDefValue(stats == null ? null : stats.getDefMax());
         card.setLeaderSkillSetId(source.getLeaderSkillSetId());
-        card.setLeaderSkill(translate.apply(source.getLeaderSkill()));
+        card.setLeaderSkill(translate.apply(CardTextType.LEADER_SKILL, source.getLeaderSkill()));
         card.setPassiveSkillSetId(resolvePassiveSkillId(source));
-        card.setPassiveSkillName(translate.apply(source.getPassiveSkillName()));
-        card.setPassiveSkillDesc(translate.apply(source.getPassiveSkillDescription()));
+        card.setPassiveSkillName(translate.apply(CardTextType.SKILL_NAME, source.getPassiveSkillName()));
+        card.setPassiveSkillDesc(translate.apply(CardTextType.PASSIVE_SKILL, source.getPassiveSkillDescription()));
         card.setActiveSkillId(source.getActiveSkillSetId());
-        card.setActiveSkillName(translate.apply(source.getActiveSkillName()));
-        card.setActiveSkillEffect(translate.apply(source.getActiveSkillEffect()));
-        card.setActiveSkillCondition(translate.apply(source.getActiveSkillCondition()));
+        card.setActiveSkillName(translate.apply(CardTextType.SKILL_NAME, source.getActiveSkillName()));
+        card.setActiveSkillEffect(translate.apply(CardTextType.ACTIVE_EFFECT, source.getActiveSkillEffect()));
+        card.setActiveSkillCondition(translate.apply(CardTextType.ACTIVE_CONDITION, source.getActiveSkillCondition()));
         card.setSkillLevelMax(source.getSkillLvMax());
         card.setDokkanFesFlag(hasTag(source, TranslationConstants.CARD_TAG_DOKKAN_FESTIVAL));
         card.setCarnivalFlag(hasTag(source, TranslationConstants.CARD_TAG_CARNIVAL));
@@ -103,30 +166,37 @@ public class DokkanDbCardAssembler {
                 .build();
     }
 
+    /** 按字段语义收集当前卡片实际使用的文本，普通与极限技能共用对应模板。 */
+    private List<CardText> collectTranslationTexts(DokkanDbCardDTO card) {
+        List<CardText> texts = new ArrayList<>();
+        add(texts, CardTextType.CHARACTER_NAME, card.getName());
+        add(texts, CardTextType.TITLE, card.getTitle());
+        add(texts, CardTextType.LEADER_SKILL, card.getLeaderSkill(), card.getEzaLeaderSkill());
+        add(texts, CardTextType.PASSIVE_SKILL, card.getPassiveSkillDescription(), card.getEzaPassiveSkillDescription());
+        add(texts, CardTextType.SKILL_NAME, card.getPassiveSkillName(), card.getEzaPassiveSkillName(),
+                card.getActiveSkillName(), card.getStandbySkillName());
+        add(texts, CardTextType.ACTIVE_EFFECT, card.getActiveSkillEffect());
+        add(texts, CardTextType.ACTIVE_CONDITION, card.getActiveSkillCondition());
+        add(texts, CardTextType.STANDBY_EFFECT, card.getStandbySkillEffect());
+        add(texts, CardTextType.STANDBY_CONDITION, card.getStandbySkillCondition());
+        add(texts, CardTextType.SKILL_NAME, safe(card.getSpecialNames()).toArray(String[]::new));
+        add(texts, CardTextType.SUPER_ATTACK, safe(card.getSpecialDescriptions()).toArray(String[]::new));
+        add(texts, CardTextType.SKILL_NAME, safe(card.getFinishSkillNames()).toArray(String[]::new));
+        add(texts, CardTextType.FINISH_EFFECT, safe(card.getFinishSkillEffects()).toArray(String[]::new));
+        add(texts, CardTextType.FINISH_CONDITION, safe(card.getFinishSkillConditions()).toArray(String[]::new));
+        add(texts, CardTextType.CHARACTER_NAME, safe(card.getTransformationNames()).toArray(String[]::new));
+        return texts;
+    }
+
     /**
-     * 为当前卡片构建 LLM 批量翻译函数。
+     * 构造卡片和文本位置组成的唯一关联键。
      *
-     * @param card             DokkanDB 卡片响应
-     * @param forceRetranslate 是否强制使用当前 LLM 链路重新翻译
-     * @return 文本翻译函数
+     * @param cardIndex 卡片批次下标
+     * @param textIndex 卡片文本下标
+     * @return 唯一关联键
      */
-    private Function<String, String> translatorFor(DokkanDbCardDTO card, boolean forceRetranslate) {
-        List<String> texts = new ArrayList<>();
-        add(texts, card.getName(), card.getTitle(), card.getLeaderSkill(), card.getPassiveSkillName(),
-                card.getPassiveSkillDescription(), card.getActiveSkillName(), card.getActiveSkillEffect(),
-                card.getActiveSkillCondition(), card.getStandbySkillName(), card.getStandbySkillEffect(),
-                card.getStandbySkillCondition(), card.getEzaLeaderSkill(), card.getEzaPassiveSkillName(),
-                card.getEzaPassiveSkillDescription(), card.getEzaLeaderSkillPre(),
-                card.getEzaPassiveSkillNamePre(), card.getEzaPassiveSkillDescriptionPre());
-        addAll(texts, card.getSpecialNames(), card.getSpecialDescriptions(), card.getFinishSkillNames(),
-                card.getFinishSkillEffects(), card.getFinishSkillConditions(), card.getTransformationNames());
-        List<String> translated = forceRetranslate ? llmTranslationService.retranslateAll(texts)
-                : llmTranslationService.translateAll(texts);
-        Map<String, String> values = new LinkedHashMap<>();
-        for (int i = 0; i < texts.size(); i++) {
-            values.put(texts.get(i), translated.get(i));
-        }
-        return value -> StringUtils.isBlank(value) ? value : values.getOrDefault(value, value);
+    private String translationKey(int cardIndex, int textIndex) {
+        return cardIndex + ":" + textIndex;
     }
 
     /**
@@ -136,13 +206,13 @@ public class DokkanDbCardAssembler {
      * @param translate 文本翻译函数
      * @return 必杀技列表
      */
-    private List<WikiSpecialAttackDTO> buildSpecials(DokkanDbCardDTO card, Function<String, String> translate) {
+    private List<WikiSpecialAttackDTO> buildSpecials(DokkanDbCardDTO card, BiFunction<CardTextType, String, String> translate) {
         List<WikiSpecialAttackDTO> result = new ArrayList<>();
         for (int i = 0; i < safe(card.getSpecialIds()).size(); i++) {
             result.add(WikiSpecialAttackDTO.builder()
                     .id(at(card.getSpecialIds(), i))
-                    .name(translate.apply(at(card.getSpecialNames(), i)))
-                    .description(translate.apply(at(card.getSpecialDescriptions(), i)))
+                    .name(translate.apply(CardTextType.SKILL_NAME, at(card.getSpecialNames(), i)))
+                    .description(translate.apply(CardTextType.SUPER_ATTACK, at(card.getSpecialDescriptions(), i)))
                     .increaseRate(at(card.getSpecialIncreaseRates(), i))
                     .lvBonus(valueOrZero(at(card.getSpecialLvBonuses(), i)))
                     .style(at(card.getSpecialStyles(), i))
@@ -160,15 +230,15 @@ public class DokkanDbCardAssembler {
      * @param translate 文本翻译函数
      * @return standby 技能列表
      */
-    private List<WikiSkillDTO> buildStandbySkills(DokkanDbCardDTO card, Function<String, String> translate) {
+    private List<WikiSkillDTO> buildStandbySkills(DokkanDbCardDTO card, BiFunction<CardTextType, String, String> translate) {
         if (card.getStandbySkillSetId() == null) {
             return Collections.emptyList();
         }
         return List.of(WikiSkillDTO.builder()
                 .id(card.getStandbySkillSetId())
-                .name(translate.apply(card.getStandbySkillName()))
-                .conditionDescription(translate.apply(card.getStandbySkillCondition()))
-                .effectDescription(translate.apply(card.getStandbySkillEffect()))
+                .name(translate.apply(CardTextType.SKILL_NAME, card.getStandbySkillName()))
+                .conditionDescription(translate.apply(CardTextType.STANDBY_CONDITION, card.getStandbySkillCondition()))
+                .effectDescription(translate.apply(CardTextType.STANDBY_EFFECT, card.getStandbySkillEffect()))
                 .label(TranslationConstants.SKILL_LABEL_STANDBY)
                 .build());
     }
@@ -180,14 +250,14 @@ public class DokkanDbCardAssembler {
      * @param translate 文本翻译函数
      * @return finish 技能列表
      */
-    private List<WikiSkillDTO> buildFinishSkills(DokkanDbCardDTO card, Function<String, String> translate) {
+    private List<WikiSkillDTO> buildFinishSkills(DokkanDbCardDTO card, BiFunction<CardTextType, String, String> translate) {
         List<WikiSkillDTO> result = new ArrayList<>();
         for (int i = 0; i < safe(card.getFinishSkillSetIds()).size(); i++) {
             result.add(WikiSkillDTO.builder()
                     .id(at(card.getFinishSkillSetIds(), i))
-                    .name(translate.apply(at(card.getFinishSkillNames(), i)))
-                    .conditionDescription(translate.apply(at(card.getFinishSkillConditions(), i)))
-                    .effectDescription(translate.apply(at(card.getFinishSkillEffects(), i)))
+                    .name(translate.apply(CardTextType.SKILL_NAME, at(card.getFinishSkillNames(), i)))
+                    .conditionDescription(translate.apply(CardTextType.FINISH_CONDITION, at(card.getFinishSkillConditions(), i)))
+                    .effectDescription(translate.apply(CardTextType.FINISH_EFFECT, at(card.getFinishSkillEffects(), i)))
                     .increaseRate(at(card.getFinishSkillIncreaseRates(), i))
                     .label(TranslationConstants.SKILL_LABEL_FINISH)
                     .build());
@@ -203,13 +273,13 @@ public class DokkanDbCardAssembler {
      * @return 变身信息列表
      */
     private List<WikiCardTransformationDTO> buildTransformations(DokkanDbCardDTO card,
-                                                                 Function<String, String> translate) {
+                                                                 BiFunction<CardTextType, String, String> translate) {
         List<WikiCardTransformationDTO> result = new ArrayList<>();
         for (int i = 0; i < safe(card.getTransformationIds()).size(); i++) {
             Long nextId = at(card.getTransformationIds(), i);
             WikiCardTransformationDTO.NextCardDTO next = WikiCardTransformationDTO.NextCardDTO.builder()
                     .id(nextId)
-                    .name(translate.apply(at(card.getTransformationNames(), i)))
+                    .name(translate.apply(CardTextType.CHARACTER_NAME, at(card.getTransformationNames(), i)))
                     .type(TranslationConstants.WIKI_TRANSFORMATION_TYPE)
                     .build();
             result.add(WikiCardTransformationDTO.builder()
@@ -230,7 +300,7 @@ public class DokkanDbCardAssembler {
      * @return EZA 卡片信息列表
      */
     private List<WikiEzaCardDTO> buildEza(DokkanDbCardDTO card, DokkanDbCardStatsDTO stats,
-                                          Function<String, String> translate) {
+                                          BiFunction<CardTextType, String, String> translate) {
         if (card.getStep() == null || card.getStep() <= 0) {
             return Collections.emptyList();
         }
@@ -289,7 +359,7 @@ public class DokkanDbCardAssembler {
      * @param passiveDescription 被动技能描述
      * @return EZA 卡片信息
      */
-    private WikiEzaCardDTO eza(DokkanDbCardDTO card, DokkanDbCardStatsDTO stats, Function<String, String> translate,
+    private WikiEzaCardDTO eza(DokkanDbCardDTO card, DokkanDbCardStatsDTO stats, BiFunction<CardTextType, String, String> translate,
                                Integer step, Integer leaderId, String leader, Integer passiveId,
                                String passiveName, String passiveDescription) {
         WikiEzaCardDTO result = new WikiEzaCardDTO();
@@ -297,7 +367,7 @@ public class DokkanDbCardAssembler {
         result.setStep(step);
         result.setLvMax(stats != null && stats.getEzaLvMax() != null ? stats.getEzaLvMax()
                 : stats == null ? null : stats.getBaseLvMax());
-        result.setName(translate.apply(card.getName()));
+        result.setName(translate.apply(CardTextType.CHARACTER_NAME, card.getName()));
         result.setRarity(card.getRarity());
         result.setPropType(card.getElement());
         result.setCost(estimateCost(card));
@@ -307,12 +377,12 @@ public class DokkanDbCardAssembler {
         result.setDefValue(ezaStat(stats == null ? null : stats.getDefMaxEza(),
                 stats == null ? null : stats.getDefMax()));
         result.setOpenAt(latestEzaDate(card));
-        result.setTitle(translate.apply(card.getTitle()));
+        result.setTitle(translate.apply(CardTextType.TITLE, card.getTitle()));
         result.setLeaderSkillId(leaderId);
-        result.setLeaderSkill(translate.apply(leader));
+        result.setLeaderSkill(translate.apply(CardTextType.LEADER_SKILL, leader));
         result.setPassiveSkillId(passiveId);
-        result.setPassiveSkillName(translate.apply(passiveName));
-        result.setPassiveSkillDesc(translate.apply(passiveDescription));
+        result.setPassiveSkillName(translate.apply(CardTextType.SKILL_NAME, passiveName));
+        result.setPassiveSkillDesc(translate.apply(CardTextType.PASSIVE_SKILL, passiveDescription));
         result.setDokkanFesFlag(hasTag(card, TranslationConstants.CARD_TAG_DOKKAN_FESTIVAL));
         result.setCarnivalFlag(hasTag(card, TranslationConstants.CARD_TAG_CARNIVAL));
         result.setFreeCardFlag(isFreeCard(card));
@@ -429,33 +499,17 @@ public class DokkanDbCardAssembler {
                 .orElse(DateUtils.parseDokkanDbDate(card.getOpenAtUpdate()));
     }
 
-    /**
-     * 将多个文本列表中的非空文本追加到目标集合。
-     *
-     * @param target 目标集合
-     * @param values 文本列表数组
-     */
-    @SafeVarargs
-    private final void addAll(List<String> target, List<String>... values) {
-        for (List<String> value : values) {
-            if (value != null) {
-                value.stream().filter(StringUtils::isNotBlank).forEach(target::add);
+    /** 收集非空文本并保留字段类型，避免相同原文在不同技能中互相覆盖。 */
+    private void add(List<CardText> target, CardTextType type, String... values) {
+        for (String value : values) {
+            if (StringUtils.isNotBlank(value)) {
+                target.add(new CardText(type, value));
             }
         }
     }
 
-    /**
-     * 将多个非空文本追加到目标集合。
-     *
-     * @param target 目标集合
-     * @param values 文本数组
-     */
-    private void add(List<String> target, String... values) {
-        for (String value : values) {
-            if (StringUtils.isNotBlank(value)) {
-                target.add(value);
-            }
-        }
+    /** 字段类型与原文共同确定一次翻译的业务语义。 */
+    private record CardText(CardTextType type, String sourceText) {
     }
 
     /**

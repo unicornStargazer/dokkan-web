@@ -10,8 +10,12 @@ import com.hb.dokkan.common.domain.response.data.SyncProgressResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.service.job.sync.SyncDataService;
 import com.hb.dokkan.service.job.sync.SyncProgressService;
-import com.hb.dokkan.service.translation.DokkanLlmTranslationService;
-import com.hb.dokkan.service.translation.DokkanTranslationService;
+import com.hb.dokkan.translation.BusinessTranslationService;
+import com.hb.dokkan.translation.domain.TranslationBatchRequest;
+import com.hb.dokkan.translation.domain.TranslationItem;
+import com.hb.dokkan.translation.domain.TranslationItemResult;
+import com.hb.dokkan.translation.domain.TranslationProviderType;
+import com.hb.dokkan.translation.domain.TranslationScene;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import com.hb.dokkan.common.utils.StringUtils;
@@ -33,10 +37,7 @@ public class DokkanDataDelegate {
     private SyncProgressService syncProgressService;
 
     @Resource
-    private DokkanTranslationService translationService;
-
-    @Resource
-    private DokkanLlmTranslationService llmTranslationService;
+    private BusinessTranslationService translationService;
 
     /**
      * 初始化卡片数据
@@ -126,8 +127,10 @@ public class DokkanDataDelegate {
             return translationParamError();
         }
         try {
-            // 调用普通翻译服务，内部负责缓存、术语保护和远程失败兜底。
-            String translated = translationService.translate(request.getText());
+            String translated = translateText(request.getText(), TranslationProviderType.GOOGLE);
+            if (translated == null) {
+                return DokkanResponse.<String>builder().fail();
+            }
             return DokkanResponse.<String>builder().withModel(translated).success();
         } catch (Exception e) {
             log.error("DokkanDataDelegate#translate error", e);
@@ -147,8 +150,10 @@ public class DokkanDataDelegate {
             return translationParamError();
         }
         try {
-            // 调用 LLM 翻译服务，配置校验和 HTTP 细节由服务与 Client 分层处理。
-            String translated = llmTranslationService.translate(request.getText());
+            String translated = translateText(request.getText(), TranslationProviderType.LLM);
+            if (translated == null) {
+                return DokkanResponse.<String>builder().fail();
+            }
             return DokkanResponse.<String>builder()
                     .withModel(translated)
                     .success();
@@ -160,6 +165,22 @@ public class DokkanDataDelegate {
             log.error("DokkanDataDelegate#translateByLlm error", e);
             return DokkanResponse.<String>builder().fail();
         }
+    }
+
+    /**
+     * 通过统一翻译模块执行显式 provider 模式的单文本翻译。
+     *
+     * @param text         原文
+     * @param providerType 指定 provider
+     * @return 成功译文；校验或 provider 失败时返回 null
+     */
+    private String translateText(String text, TranslationProviderType providerType) {
+        TranslationItemResult result = translationService.translate(new TranslationBatchRequest(
+                        TranslationScene.GENERAL_TEXT, providerType,
+                        java.util.List.of(new TranslationItem("request", text)), false))
+                .stream().findFirst().orElse(null);
+        return result != null && result.status() == TranslationItemResult.Status.SUCCESS
+                ? result.translatedText() : null;
     }
 
     /**

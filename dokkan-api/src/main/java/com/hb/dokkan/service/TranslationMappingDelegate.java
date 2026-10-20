@@ -9,7 +9,7 @@ import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.domain.response.base.PageResponse;
 import com.hb.dokkan.common.domain.response.translation.TranslationMappingResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import com.hb.dokkan.service.translation.TranslationMappingService;
+import com.hb.dokkan.translation.TranslationMappingService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

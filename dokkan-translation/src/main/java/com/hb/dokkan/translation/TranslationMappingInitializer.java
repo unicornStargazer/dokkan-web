@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.translation;
+package com.hb.dokkan.translation;
 
 import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.constants.TranslationMappingConstants;

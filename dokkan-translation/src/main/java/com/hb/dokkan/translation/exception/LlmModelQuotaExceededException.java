@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.translation.exception;
+package com.hb.dokkan.translation.exception;
 
 /**
  * @Description LLM模型额度不足异常

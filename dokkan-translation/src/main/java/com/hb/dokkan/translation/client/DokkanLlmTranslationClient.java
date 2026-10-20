@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.translation.client;
+package com.hb.dokkan.translation.client;
 
 import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.constants.LlmResponsesConstants;
@@ -7,7 +7,7 @@ import com.hb.dokkan.common.domain.dto.translation.LlmTokenUsageDTO;
 import com.hb.dokkan.common.domain.dto.translation.LlmTranslationResultDTO;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.config.translation.LlmTranslationProperties;
-import com.hb.dokkan.service.translation.exception.LlmModelQuotaExceededException;
+import com.hb.dokkan.translation.exception.LlmModelQuotaExceededException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpHeaders;

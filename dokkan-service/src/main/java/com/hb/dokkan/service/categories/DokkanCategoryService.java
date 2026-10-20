@@ -10,7 +10,7 @@ import com.hb.dokkan.common.domain.response.category.CategoryResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
 import com.hb.dokkan.service.convert.DokkanCategoryConvert;
-import com.hb.dokkan.service.translation.DokkanTranslationService;
+import com.hb.dokkan.translation.BusinessTranslationService;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -34,7 +34,7 @@ public class DokkanCategoryService {
     private DokkanCategoryConvert categoryConvert;
 
     @Resource
-    private DokkanTranslationService translationService;
+    private BusinessTranslationService translationService;
 
     /**
      * 分页查询分类列表。
@@ -66,7 +66,7 @@ public class DokkanCategoryService {
         DokkanCategoryPO category = categoryConvert.saveRequestToPo(request);
         normalizeSaveFields(category);
         categoryRepository.saveOrUpdate(category);
-        translationService.refreshCategoryDomainGlossary();
+        translationService.refreshGlossary();
         return categoryConvert.poToResponse(categoryRepository.getById(category.getId()));
     }
 

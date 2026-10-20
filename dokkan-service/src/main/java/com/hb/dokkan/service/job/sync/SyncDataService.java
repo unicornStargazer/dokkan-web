@@ -282,22 +282,17 @@ public class SyncDataService {
      * @return 重新组装后的卡片列表
      */
     private List<WikiCardDTO> fetchRetranslateCards(List<Long> cardIds) {
-        if (cardIds.size() <= 1) {
-            return cardIds.stream()
-                    .map(cardId -> dokkanDbFacade.getCard(cardId, true))
-                    .filter(Objects::nonNull)
-                    .toList();
-        }
         int permits = llmConcurrencyPermits();
         Semaphore semaphore = new Semaphore(permits);
         log.info("batch retranslate fetch started, cardIds:{}, concurrency:{}", cardIds, permits);
-        List<CompletableFuture<WikiCardDTO>> futures = cardIds.stream()
-                .map(cardId -> CompletableFuture.supplyAsync(() -> fetchRetranslateCard(cardId, semaphore), dokkanExecutor))
+        List<CompletableFuture<DokkanDbFacade.CardSourceData>> futures = cardIds.stream()
+                .map(cardId -> CompletableFuture.supplyAsync(() -> fetchRetranslateCardSource(cardId, semaphore), dokkanExecutor))
                 .toList();
-        List<WikiCardDTO> cards = futures.stream()
-                .map(this::joinRetranslateCard)
+        List<DokkanDbFacade.CardSourceData> sources = futures.stream()
+                .map(this::joinRetranslateCardSource)
                 .filter(Objects::nonNull)
                 .toList();
+        List<WikiCardDTO> cards = dokkanDbFacade.assembleCards(sources, true);
         log.info("batch retranslate fetch completed, requestedCount:{}, fetchedCount:{}", cardIds.size(), cards.size());
         return cards;
     }
@@ -309,13 +304,13 @@ public class SyncDataService {
      * @param semaphore 并发许可
      * @return 重新组装后的卡片
      */
-    private WikiCardDTO fetchRetranslateCard(Long cardId, Semaphore semaphore) {
+    private DokkanDbFacade.CardSourceData fetchRetranslateCardSource(Long cardId, Semaphore semaphore) {
         boolean acquired = false;
         try {
             semaphore.acquire();
             acquired = true;
             log.info("batch retranslate card started, cardId:{}", cardId);
-            WikiCardDTO card = dokkanDbFacade.getCard(cardId, true);
+            DokkanDbFacade.CardSourceData card = dokkanDbFacade.fetchCardSource(cardId);
             log.info("batch retranslate card completed, cardId:{}, found:{}", cardId, Objects.nonNull(card));
             return card;
         } catch (InterruptedException e) {
@@ -334,7 +329,8 @@ public class SyncDataService {
      * @param future 卡片重翻 Future
      * @return 重新组装后的卡片
      */
-    private WikiCardDTO joinRetranslateCard(CompletableFuture<WikiCardDTO> future) {
+    private DokkanDbFacade.CardSourceData joinRetranslateCardSource(
+            CompletableFuture<DokkanDbFacade.CardSourceData> future) {
         try {
             return future.join();
         } catch (CompletionException e) {

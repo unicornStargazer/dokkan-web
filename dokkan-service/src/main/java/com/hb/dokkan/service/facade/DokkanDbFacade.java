@@ -8,9 +8,14 @@ import com.hb.dokkan.common.domain.dto.data.wiki.WikiCategoryDTO;
 import com.hb.dokkan.common.domain.dto.data.wiki.WikiLinkDTO;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.http.RetryTemplate;
+import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.service.client.DokkanDbClient;
 import com.hb.dokkan.service.convert.DokkanDbCardAssembler;
-import com.hb.dokkan.service.translation.DokkanTranslationService;
+import com.hb.dokkan.translation.BusinessTranslationService;
+import com.hb.dokkan.translation.domain.TranslationBatchRequest;
+import com.hb.dokkan.translation.domain.TranslationItem;
+import com.hb.dokkan.translation.domain.TranslationProviderType;
+import com.hb.dokkan.translation.domain.TranslationScene;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 /**
@@ -41,10 +48,13 @@ public class DokkanDbFacade {
     private DokkanDbCardAssembler assembler;
 
     @Resource
-    private DokkanTranslationService translationService;
+    private BusinessTranslationService businessTranslationService;
 
     @Resource
     private DokkanDbClient dokkanDbClient;
+
+    @Resource
+    private DokkanThreadPoolExecutor dokkanThreadPoolExecutor;
 
     /**
      * 获取英文版最近卡片目录。
@@ -92,15 +102,71 @@ public class DokkanDbFacade {
      */
     public WikiCardDTO getCard(Long cardId, boolean forceRetranslate) {
         return RetryTemplate.executeWithRetrySliently(() -> {
-            // 卡片详情、被动、队长技等模板统一取 Global 英文源，避免新增卡走日文导致翻译质量不稳定。
+            CardSourceData raw = fetchRawCard(cardId);
+            return raw == null ? null : assembler.assemble(raw.card(), raw.stats(), forceRetranslate);
+        }, httpPoolProperties.getRetry(), "getDokkanDbCard-cardId:" + cardId);
+    }
+
+    /**
+     * 获取单张卡片原始数据，供已受并发控制的调用方执行批量翻译。
+     *
+     * @param cardId 卡片 ID
+     * @return 原始卡片及数值数据，获取失败时返回 null
+     */
+    public CardSourceData fetchCardSource(Long cardId) {
+        return fetchRawCard(cardId);
+    }
+
+    /**
+     * 将原始卡片数据集合统一翻译并组装为 wiki 模型。
+     *
+     * @param sources          原始卡片数据
+     * @param forceRetranslate 是否强制重翻
+     * @return wiki 卡片模型
+     */
+    public List<WikiCardDTO> assembleCards(List<CardSourceData> sources, boolean forceRetranslate) {
+        if (CollectionUtils.isEmpty(sources)) {
+            return List.of();
+        }
+        List<DokkanDbCardDTO> cards = sources.stream().map(CardSourceData::card).toList();
+        List<DokkanDbCardStatsDTO> stats = sources.stream().map(CardSourceData::stats).toList();
+        return assembler.assembleAll(cards, stats, forceRetranslate);
+    }
+
+    /**
+     * 获取单张卡片的原始详情和数值，远程失败時返回 null。
+     *
+     * @param cardId 卡片 ID
+     * @return 原始卡片数据
+     */
+    private CardSourceData fetchRawCard(Long cardId) {
+        return RetryTemplate.executeWithRetrySliently(() -> {
             List<DokkanDbCardDTO> cards = dokkanDbClient.listCardsFromGlobal(cardId);
-            if (cards == null || cards.isEmpty()) {
+            if (CollectionUtils.isEmpty(cards)) {
                 return null;
             }
             List<DokkanDbCardStatsDTO> stats = dokkanDbClient.listCardStats(DokkanDbClient.Source.GLOBAL, cardId);
-            return assembler.assemble(cards.getFirst(), stats == null || stats.isEmpty() ? null : stats.getFirst(),
-                    forceRetranslate);
+            return new CardSourceData(cards.getFirst(), CollectionUtils.isEmpty(stats) ? null : stats.getFirst());
         }, httpPoolProperties.getRetry(), "getDokkanDbCard-cardId:" + cardId);
+    }
+
+    /**
+     * 获取并发详情查询结果，单卡异常不影响同批其他卡片。
+     *
+     * @param future 卡片详情查询任务
+     * @return 原始卡片数据，失败时返回 null
+     */
+    private CardSourceData joinCardResult(CompletableFuture<CardSourceData> future) {
+        try {
+            return future.join();
+        } catch (CompletionException e) {
+            log.warn("DokkanDB card batch fetch failed", e.getCause() == null ? e : e.getCause());
+            return null;
+        }
+    }
+
+    /** 保留单卡原始数据与数值的关联。 */
+    public record CardSourceData(DokkanDbCardDTO card, DokkanDbCardStatsDTO stats) {
     }
 
     /**
@@ -110,10 +176,17 @@ public class DokkanDbFacade {
      * @return wiki 卡片模型列表
      */
     public List<WikiCardDTO> getCards(List<Long> cardIds) {
-        return cardIds.parallelStream()
-                .map(this::getCard)
+        if (CollectionUtils.isEmpty(cardIds)) {
+            return List.of();
+        }
+        List<CompletableFuture<CardSourceData>> futures = cardIds.stream()
+                .map(cardId -> CompletableFuture.supplyAsync(() -> fetchRawCard(cardId), dokkanThreadPoolExecutor))
+                .toList();
+        List<CardSourceData> rawCards = futures.stream()
+                .map(this::joinCardResult)
                 .filter(Objects::nonNull)
                 .toList();
+        return assembleCards(rawCards, false);
     }
 
     /**
@@ -124,9 +197,11 @@ public class DokkanDbFacade {
     public List<WikiCategoryDTO> getCategories() {
         // 分类名称统一使用 Global 英文源，保证术语进入翻译链路前语言一致。
         List<WikiCategoryDTO> rows = dokkanDbClient.listCategoriesFromGlobal();
-        List<String> translated = translationService.translateAll(rows.stream()
-                .map(WikiCategoryDTO::getCategoryName)
-                .toList());
+        List<String> translated = businessTranslationService.translate(new TranslationBatchRequest(
+                        TranslationScene.CATEGORY_NAME, TranslationProviderType.GOOGLE,
+                        rows.stream().map(row -> new TranslationItem(String.valueOf(row.getCategoryId()),
+                                row.getCategoryName())).toList(), false))
+                .stream().map(result -> result.translatedText()).toList();
         for (int i = 0; i < rows.size(); i++) {
             String englishName = rows.get(i).getCategoryName();
             rows.get(i).setCategoryName(translated.get(i));
@@ -155,7 +230,12 @@ public class DokkanDbFacade {
             sourceTexts.add(effect == null ? null : effect.description());
             sourceTexts.add(effect == null ? null : effect.description10());
         }
-        List<String> translated = translationService.translateAll(sourceTexts);
+        List<String> translated = businessTranslationService.translate(new TranslationBatchRequest(
+                        TranslationScene.LINK_TEXT, TranslationProviderType.GOOGLE,
+                        java.util.stream.IntStream.range(0, sourceTexts.size())
+                                .mapToObj(index -> new TranslationItem(String.valueOf(index), sourceTexts.get(index)))
+                                .toList(), false))
+                .stream().map(result -> result.translatedText()).toList();
         for (int i = 0; i < rows.size(); i++) {
             int offset = i * CardSyncConstants.LINK_TRANSLATION_TEXT_COUNT;
             rows.get(i).setLinkName(translated.get(offset + CardSyncConstants.LINK_NAME_TEXT_OFFSET));

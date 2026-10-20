@@ -1,13 +1,14 @@
-package com.hb.dokkan.service.translation;
+package com.hb.dokkan.translation;
 
 import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.domain.dto.translation.LlmTranslationResultDTO;
 import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.config.http.HttpPoolProperties;
 import com.hb.dokkan.config.translation.LlmTranslationProperties;
-import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
-import com.hb.dokkan.service.translation.client.DokkanLlmTranslationClient;
-import com.hb.dokkan.service.translation.exception.LlmModelQuotaExceededException;
+import com.hb.dokkan.translation.repository.TranslationGlossaryStore;
+import com.hb.dokkan.translation.domain.CardTextType;
+import com.hb.dokkan.translation.client.DokkanLlmTranslationClient;
+import com.hb.dokkan.translation.exception.LlmModelQuotaExceededException;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
@@ -43,7 +45,7 @@ public class DokkanLlmTranslationService {
     private DokkanLlmTranslationClient llmTranslationClient;
 
     @Resource
-    private DokkanCategoryRepository categoryRepository;
+    private TranslationGlossaryStore glossaryStore;
 
     @Resource
     private TranslationMappingService translationMappingService;
@@ -59,6 +61,18 @@ public class DokkanLlmTranslationService {
 
     /** LLM 外部调用全局并发许可，避免批量卡片重翻时叠加触发过多模型请求。 */
     private Semaphore llmSemaphore;
+
+    /** 普通翻译结果缓存，按 system prompt 版本隔离，避免相同技能文本重复调用 LLM。 */
+    private final Map<String, String> translationCache = new ConcurrentHashMap<>();
+
+    /** 运行期术语表缓存，避免每张卡片重复查询分类表和映射表。 */
+    private volatile Map<String, String> runtimeGlossaryCache = Map.of();
+
+    /** 术语表来源快照 hash，用于检测页面映射变更。 */
+    private volatile int runtimeGlossarySourceHash;
+
+    /** 术语表缓存是否已经完成首次加载。 */
+    private volatile boolean runtimeGlossaryLoaded;
 
     /**
      * 初始化 LLM 全局并发许可。
@@ -76,12 +90,7 @@ public class DokkanLlmTranslationService {
      * @return 翻译后的简体中文文本
      */
     public String translate(String source) {
-        // 先做业务配置校验，避免未启用或缺配置时请求外部接口。
-        checkConfig();
-        // 根据页面维护映射与本地分类英文名构建动态术语表，保证技能文本中的专有名词稳定。
-        String systemPrompt = buildBatchSystemPromptWithGlossary();
-        // 按模型剩余额度选择可用模型，并在额度不足时自动切换重试。
-        return translateWithModelSwitch(List.of(source), systemPrompt).targets().getFirst();
+        return translateAll(List.of(source)).getFirst();
     }
 
     /**
@@ -91,6 +100,18 @@ public class DokkanLlmTranslationService {
      * @return 翻译后的文本列表
      */
     public List<String> translateAll(Collection<String> sourceTexts) {
+        return translateAll(sourceTexts, CardTextType.GENERAL, true);
+    }
+
+    /**
+     * 执行批量翻译，并按调用场景决定是否复用普通翻译缓存。
+     *
+     * @param sourceTexts 待翻译文本集合
+     * @param textType    卡片字段模板类型
+     * @param useCache    是否复用精确映射和 LLM 结果缓存
+     * @return 翻译后的文本列表
+     */
+    public List<String> translateAll(Collection<String> sourceTexts, CardTextType textType, boolean useCache) {
         if (Objects.isNull(sourceTexts) || sourceTexts.isEmpty()) {
             return Collections.emptyList();
         }
@@ -107,22 +128,44 @@ public class DokkanLlmTranslationService {
         int permits = llmConcurrencyPermits();
         log.info("LLM batch translate started, textCount:{}, distinctCount:{}, concurrency:{}",
                 orderedTexts.size(), distinctTexts.size(), permits);
-        String systemPrompt = buildBatchSystemPromptWithGlossary();
-        List<List<String>> batches = partitionTexts(distinctTexts);
+        String systemPrompt = buildBatchSystemPromptWithGlossary(textType);
+        String cacheKeyPrefix = buildCacheKeyPrefix(systemPrompt);
+        Map<String, String> translatedValues = new LinkedHashMap<>();
+        Map<String, String> exactMappings = useCache
+                ? translationMappingService.listEnabledMappingMap() : Map.of();
+        List<String> pendingTexts = new ArrayList<>();
+        for (String text : distinctTexts) {
+            if (useCache && exactMappings.containsKey(text)) {
+                translatedValues.put(text, exactMappings.get(text));
+                continue;
+            }
+            String cachedValue = useCache ? translationCache.get(cacheKeyPrefix + text) : null;
+            if (StringUtils.isNotBlank(cachedValue)) {
+                translatedValues.put(text, cachedValue);
+                continue;
+            }
+            pendingTexts.add(text);
+        }
+        List<List<String>> batches = partitionTexts(pendingTexts);
         List<CompletableFuture<BatchTranslationResult>> futures = batches.stream()
                 .map(batch -> CompletableFuture.supplyAsync(
                         () -> translateWithPermit(batch, systemPrompt), dokkanExecutor))
                 .toList();
-        Map<String, String> translatedValues = new LinkedHashMap<>();
         futures.stream()
                 .map(this::joinBatchTranslationResult)
                 .forEach(result -> {
                     for (int index = 0; index < result.sources().size(); index++) {
-                        translatedValues.put(result.sources().get(index), result.targets().get(index));
+                        String source = result.sources().get(index);
+                        String target = result.targets().get(index);
+                        translatedValues.put(source, target);
+                        if (useCache) {
+                            cacheTranslation(cacheKeyPrefix + source, target);
+                        }
                     }
                 });
-        log.info("LLM batch translate completed, textCount:{}, distinctCount:{}, requestCount:{}, costMs:{}",
-                orderedTexts.size(), distinctTexts.size(), batches.size(), System.currentTimeMillis() - startTime);
+        log.info("LLM batch translate completed, textCount:{}, distinctCount:{}, pendingCount:{}, cachedCount:{}, requestCount:{}, costMs:{}",
+                orderedTexts.size(), distinctTexts.size(), pendingTexts.size(),
+                distinctTexts.size() - pendingTexts.size(), batches.size(), System.currentTimeMillis() - startTime);
         return orderedTexts.stream()
                 .map(text -> StringUtils.isBlank(text) ? text : translatedValues.getOrDefault(text, text))
                 .toList();
@@ -135,8 +178,7 @@ public class DokkanLlmTranslationService {
      * @return 重新翻译后的文本列表
      */
     public List<String> retranslateAll(Collection<String> sourceTexts) {
-        // 当前 LLM 链路不接入普通翻译缓存，强制重翻与批量翻译保持一致。
-        return translateAll(sourceTexts);
+        return translateAll(sourceTexts, CardTextType.GENERAL, false);
     }
 
     /**
@@ -264,8 +306,10 @@ public class DokkanLlmTranslationService {
     }
 
     /** 构建批量翻译 prompt；协议约束只构建一次并复用于当前批次。 */
-    private String buildBatchSystemPromptWithGlossary() {
+    private String buildBatchSystemPromptWithGlossary(CardTextType textType) {
         return buildSystemPromptWithGlossary()
+                + TranslationConstants.LLM_PROMPT_SECTION_SEPARATOR
+                + CardTranslationTemplates.instruction(textType)
                 + TranslationConstants.LLM_PROMPT_SECTION_SEPARATOR
                 + TranslationConstants.LLM_BATCH_PROMPT_INSTRUCTION;
     }
@@ -297,19 +341,50 @@ public class DokkanLlmTranslationService {
      *
      * @return 英文原文到本地中文术语的映射
      */
-    private Map<String, String> buildRuntimeGlossary() {
+    private synchronized Map<String, String> buildRuntimeGlossary() {
         try {
+            Map<String, String> mappings = translationMappingService.listEnabledMappingMap();
+            int sourceHash = mappings.hashCode();
+            if (runtimeGlossaryLoaded && runtimeGlossarySourceHash == sourceHash) {
+                return runtimeGlossaryCache;
+            }
             Map<String, String> glossary = new LinkedHashMap<>();
             // 页面维护的 DB 映射优先级最高，后续分类中英文映射不覆盖用户手动配置。
-            glossary.putAll(translationMappingService.listEnabledMappingMap());
-            categoryRepository.list().stream()
+            glossary.putAll(mappings);
+            glossaryStore.listCategories().stream()
                     .filter(row -> StringUtils.isNoneBlank(row.getCategoryNameEn(), row.getCategoryName()))
                     .forEach(row -> glossary.putIfAbsent(row.getCategoryNameEn(), row.getCategoryName()));
-            return glossary;
+            runtimeGlossaryCache = Map.copyOf(glossary);
+            runtimeGlossarySourceHash = sourceHash;
+            runtimeGlossaryLoaded = true;
+            return runtimeGlossaryCache;
         } catch (Exception e) {
             log.warn("build LLM runtime glossary failed", e);
             return Map.of();
         }
+    }
+
+    /**
+     * 构建带 prompt 版本的缓存键前缀，映射变化后自动避免复用旧译文。
+     *
+     * @param systemPrompt 当前 system prompt
+     * @return 缓存键前缀
+     */
+    private String buildCacheKeyPrefix(String systemPrompt) {
+        return Integer.toUnsignedString(systemPrompt.hashCode()) + TranslationConstants.BATCH_ROW_SEPARATOR;
+    }
+
+    /**
+     * 写入普通翻译缓存，超过上限时清空旧快照后继续使用。
+     *
+     * @param key    缓存键
+     * @param target 译文
+     */
+    private void cacheTranslation(String key, String target) {
+        if (translationCache.size() >= TranslationConstants.LLM_TRANSLATION_CACHE_MAX_ENTRIES) {
+            translationCache.clear();
+        }
+        translationCache.put(key, target);
     }
 
     /**

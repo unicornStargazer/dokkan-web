@@ -61,6 +61,11 @@
 
         <dependency>
             <groupId>com.hb.dokkan</groupId>
+            <artifactId>dokkan-translation</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-dependencies</artifactId>
         </dependency>
         <!--内部依赖  end-->

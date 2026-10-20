@@ -254,6 +254,9 @@ public final class TranslationConstants {
     /** 单次 Responses 请求原文最大字符数，超过后拆分为下一批。 */
     public static final int LLM_BATCH_MAX_SOURCE_CHARS = 12_000;
 
+    /** LLM 翻译结果本地缓存最大条目数，避免长期增量同步无限增长。 */
+    public static final int LLM_TRANSLATION_CACHE_MAX_ENTRIES = 20_000;
+
     /** 批量翻译协议，要求模型按输入顺序返回 JSON 字符串数组。 */
     public static final String LLM_BATCH_PROMPT_INSTRUCTION = """
             The user input is a JSON array of objects with index and text fields.

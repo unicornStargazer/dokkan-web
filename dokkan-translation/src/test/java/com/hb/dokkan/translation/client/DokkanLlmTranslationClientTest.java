@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.translation.client;
+package com.hb.dokkan.translation.client;
 
 import com.hb.dokkan.config.translation.LlmTranslationProperties;
 import com.hb.dokkan.common.domain.dto.translation.LlmTranslationResultDTO;

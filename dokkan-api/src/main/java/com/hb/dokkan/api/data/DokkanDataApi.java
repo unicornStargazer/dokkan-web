@@ -90,7 +90,7 @@ public class DokkanDataApi {
      * @return 同步进度响应
      */
     @GetMapping("/sync-progress/{jobId}")
-    public DokkanResponse<SyncProgressResponse> syncProgress(@PathVariable String jobId) {
+    public DokkanResponse<SyncProgressResponse> syncProgress(@PathVariable("jobId") String jobId) {
         log.info("syncProgress request, jobId:{}", jobId);
         DokkanResponse<SyncProgressResponse> response = dataDelegate.syncProgress(jobId);
         log.info("syncProgress response:{}", JsonUtils.object2Json(response));

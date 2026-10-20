@@ -1,11 +1,11 @@
-package com.hb.dokkan.service.translation;
+package com.hb.dokkan.translation;
 
 import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.common.utils.TranslationUtils;
-import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
-import com.hb.dokkan.service.translation.client.GoogleTranslationClient;
+import com.hb.dokkan.translation.repository.TranslationGlossaryStore;
+import com.hb.dokkan.translation.client.GoogleTranslationClient;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -58,7 +58,7 @@ public class DokkanTranslationService {
     private volatile boolean domainGlossaryLoaded;
 
     @Resource
-    private DokkanCategoryRepository categoryRepository;
+    private TranslationGlossaryStore glossaryStore;
 
     @Resource
     private GoogleTranslationClient googleTranslationClient;
@@ -220,7 +220,7 @@ public class DokkanTranslationService {
         }
         try {
             // 技能描述里主要出现分类名，直接使用本地分类表的英文名和中文名构建术语映射，避免翻译时再查外部接口。
-            categoryRepository.list().stream()
+            glossaryStore.listCategories().stream()
                     .filter(row -> StringUtils.isNoneBlank(row.getCategoryNameEn(), row.getCategoryName()))
                     .forEach(row -> registerTrustedTerm(row.getCategoryNameEn(), row.getCategoryName()));
             domainGlossaryLoaded = true;

@@ -1,4 +1,4 @@
-package com.hb.dokkan.service.translation;
+package com.hb.dokkan.translation;
 
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.constants.TranslationMappingConstants;
@@ -12,8 +12,8 @@ import com.hb.dokkan.common.domain.response.translation.TranslationMappingRespon
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.common.utils.CollectionUtils;
 import com.hb.dokkan.common.utils.TranslationUtils;
-import com.hb.dokkan.infrastructure.mysql.translation.TranslationMappingRepository;
-import com.hb.dokkan.service.convert.TranslationMappingConvert;
+import com.hb.dokkan.translation.repository.TranslationMappingStore;
+import com.hb.dokkan.translation.convert.TranslationMappingConvert;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -42,7 +42,7 @@ public class TranslationMappingService {
     private volatile boolean mappingCacheLoaded;
 
     @Resource
-    private TranslationMappingRepository translationMappingRepository;
+    private TranslationMappingStore translationMappingRepository;
 
     @Resource
     private TranslationMappingConvert translationMappingConvert;
@@ -110,7 +110,7 @@ public class TranslationMappingService {
         if (Objects.isNull(request) || CollectionUtils.isEmpty(request.getIds())) {
             throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
         }
-        translationMappingRepository.removeByMappingIds(request.getIds());
+        translationMappingRepository.removeByIds(request.getIds());
         refreshMappingCache();
     }
 
