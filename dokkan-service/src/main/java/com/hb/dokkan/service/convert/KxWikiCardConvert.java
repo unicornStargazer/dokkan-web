@@ -157,7 +157,7 @@ public class KxWikiCardConvert {
     }
 
     /**
-     * 将状态数值、队长技、被动与 UTC 开放时间转换为持久化字段。
+     * 将状态数值、队长技、被动与 UTC 开放时间转换为持久化字段；无被动时保留空值。
      **/
     private CardStatePO toState(CardPO card, KxWikiStateDTO source, KxWikiTextDTO leader, KxWikiExtrasDTO extras) {
         if (!hasRequiredStateFields(source)) {
@@ -177,22 +177,33 @@ public class KxWikiCardConvert {
             state.setLeaderSkillName(leader.getName());
             state.setLeaderSkillDesc(text(leader));
         }
-        state.setPassiveSkillId(source.getPassive().getId());
-        state.setPassiveSkillName(source.getPassive().getName());
-        state.setPassiveSkillDesc(text(source.getPassive()));
+        // 部分卡片或形态本身没有被动，不阻止导入，也不继承其他状态的被动。
+        KxWikiTextDTO passive = source.getPassive();
+        if (passive != null) {
+            state.setPassiveSkillId(passive.getId());
+            state.setPassiveSkillName(passive.getName());
+            state.setPassiveSkillDesc(text(passive));
+        }
+        // 被动关联的领域属于当前状态，与技能行的展开领域关系分别持久化。
+        Map<String, Object> attributes = new LinkedHashMap<>();
+        attributes.put(CardSyncConstants.SKILL_DOMAINS_FIELD, safe(passive == null ? null : passive.getDomains()));
+        state.setAttributes(JsonUtils.object2Json(attributes));
         String openedAt = extras == null || extras.getAwakeningDates() == null ? null : extras.getAwakeningDates().get(source.getKey());
         state.setPublishTime(CardStateEnum.BASE.getKey().equals(source.getKey()) ? card.getPublishTime() : DateUtils.parseUtcDate(openedAt));
         return state;
     }
 
     /**
-     * 按技能类型保存并按 skill_id 对齐 enrichment，保留额外字段供 ES 展示。
+     * 按源记录 id 保存技能并对齐 enrichment，保留共用效果编号等额外字段供追溯。
      **/
     private void appendSkills(KxWikiCardBO aggregate, Long cardId, KxWikiStateDTO state, KxWikiEnrichedStateDTO enrichment) {
+        // skill_id 是可复用的效果编号，不同气力档位必须通过各自的记录 id 对齐。
+        Map<Long, KxWikiSkillDTO> superEnrichment = safe(enrichment == null ? null : enrichment.getSuperAttacks())
+                .stream().filter(row -> row.getId() != null)
+                .collect(Collectors.toMap(KxWikiSkillDTO::getId, row -> row));
         int sort = 0;
         for (KxWikiSkillDTO skill : safe(state.getSuperAttacks())) {
-            KxWikiSkillDTO supplement = enrichment == null ? null : safe(enrichment.getSuperAttacks()).stream()
-                    .filter(row -> Objects.equals(row.getSkillId(), skill.getSkillId())).findFirst().orElse(null);
+            KxWikiSkillDTO supplement = superEnrichment.get(skill.getId());
             aggregate.getSkills().add(toSkill(cardId, state.getKey(), CardSkillTypeEnum.SUPER, skill, supplement, sort++));
         }
         if (state.getActiveSkill() != null) {
@@ -215,7 +226,7 @@ public class KxWikiCardConvert {
      **/
     private CardSkillPO toSkill(Long cardId, String state, CardSkillTypeEnum type, KxWikiSkillDTO source,
                                 KxWikiSkillDTO supplement, int sort) {
-        Long skillId = type == CardSkillTypeEnum.SUPER ? source.getSkillId() : source.getId();
+        Long skillId = source.getId();
         if (skillId == null || StringUtils.isBlank(source.getName())) {
             throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
         }
@@ -241,10 +252,14 @@ public class KxWikiCardConvert {
             });
         }
         Map<String, Object> attributes = new LinkedHashMap<>();
+        if (type == CardSkillTypeEnum.SUPER) {
+            attributes.put(CardSyncConstants.SKILL_EFFECT_ID_FIELD, source.getSkillId());
+        }
         attributes.put(CardSyncConstants.SKILL_BONUSES_FIELD, source.getBonuses());
         attributes.put(CardSyncConstants.SKILL_EXEC_LIMIT_FIELD, source.getExecLimit());
         attributes.put(CardSyncConstants.SKILL_TURN_FIELD, source.getTurn());
         attributes.put(CardSyncConstants.SKILL_SA_LEVEL_FIELD, source.getSuperAttackLevel());
+        attributes.put(CardSyncConstants.SKILL_DOMAINS_FIELD, safe(source.getDomains()));
         skill.setAttributes(JsonUtils.object2Json(attributes));
         return skill;
     }
@@ -324,7 +339,7 @@ public class KxWikiCardConvert {
     }
 
     /**
-     * 先检查三围对象，再依次校验满级数值及被动技能，防止写入不完整状态。
+     * 校验三围对象及满级数值；被动是可选技能，不作为状态完整性的判断条件。
      **/
     private boolean hasRequiredStateFields(KxWikiStateDTO source) {
         if (source.getStats() == null) {
@@ -333,10 +348,8 @@ public class KxWikiCardConvert {
             return false;
         } else if (source.getStats().getAtk() == null) {
             return false;
-        } else if (source.getStats().getDef() == null) {
-            return false;
         } else {
-            return source.getPassive() != null;
+            return source.getStats().getDef() != null;
         }
     }
 

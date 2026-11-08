@@ -60,11 +60,11 @@ public class CardQueryRequest extends PageRequest implements Serializable {
      **/
     private Integer cost;
     /**
-     * 祭限定标记精确筛选条件。
+     * 限定标记精确筛选条件。
      **/
     private Boolean dokkanFesFlag;
     /**
-     * 嘉年华标记精确筛选条件。
+     * 祭限定标记精确筛选条件。
      **/
     private Boolean carnivalFlag;
     /**
@@ -96,7 +96,7 @@ public class CardQueryRequest extends PageRequest implements Serializable {
     /**
      * 排序字段
      * key: 排序字段名
-     * value: true: 升序, false: 降序
+     * value: true: 降序, false: 升序（与 ES 查询实现保持一致）
      **/
     private Map<String, Boolean> orderBy;
 

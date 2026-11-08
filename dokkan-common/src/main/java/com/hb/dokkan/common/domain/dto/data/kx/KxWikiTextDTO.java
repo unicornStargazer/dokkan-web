@@ -33,6 +33,10 @@ public class KxWikiTextDTO implements Serializable {
      **/
     private String descriptionTemplate;
     /**
+     * 当前被动等文本技能关联的领域，缺省表示无领域信息。
+     **/
+    private List<KxWikiDomainDTO> domains;
+    /**
      * 满级链接技能描述。
      **/
     private String maxLevelDescription;

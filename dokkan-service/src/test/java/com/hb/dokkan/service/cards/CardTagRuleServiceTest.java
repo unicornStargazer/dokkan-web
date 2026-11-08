@@ -30,7 +30,7 @@ public class CardTagRuleServiceTest {
     }
 
     /**
-     * 人工明确取消祭限定后，自动同步不得重新打开标记。
+     * 人工明确取消限定后，自动同步不得重新打开标记。
      **/
     @Test
     public void lockedTagsShouldWinOverAutomaticRule() {

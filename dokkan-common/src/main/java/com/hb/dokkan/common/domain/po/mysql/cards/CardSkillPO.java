@@ -27,7 +27,7 @@ public class CardSkillPO extends BasePO implements Serializable {
      **/
     private String skillType;
     /**
-     * 源技能业务 ID，必杀技对应源站 skill_id。
+     * 源技能记录 id，区分共用同一效果的不同气力必杀；原 skill_id 保存在扩展属性中。
      **/
     private Long skillId;
     /**

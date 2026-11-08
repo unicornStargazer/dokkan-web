@@ -64,6 +64,11 @@ public class RepeatedIndexCreationTest {
             assertEquals(requests.get(0), requests.get(1));
             assertTrue(requests.getFirst().contains("comma_analyzer"));
             assertTrue(requests.getFirst().contains("specialSkills"));
+            assertTrue(requests.getFirst().contains("states"));
+            assertTrue(requests.getFirst().contains("activeSkills"));
+            assertTrue(requests.getFirst().contains("stateKey"));
+            assertTrue(requests.getFirst().contains("passiveDomains"));
+            assertTrue(requests.getFirst().contains("domains"));
         } finally {
             server.stop(0);
             GlobalConfigCache.setGlobalConfig(previousConfig);

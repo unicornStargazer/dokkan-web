@@ -11,6 +11,10 @@ import java.util.*;
 @Data
 public class WikiContext {
     /**
+     * 是否重新抓取同步范围内的所有卡片，默认按版本和候选变化增量同步。
+     **/
+    private boolean force;
+    /**
      * 本轮成功抓取的本体及形态卡聚合，等待事务写入。
      **/
     private List<KxWikiCardBO> cardData = new ArrayList<>();

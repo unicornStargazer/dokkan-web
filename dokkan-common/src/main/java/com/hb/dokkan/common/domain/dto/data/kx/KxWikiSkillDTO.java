@@ -17,11 +17,11 @@ import java.io.Serializable;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class KxWikiSkillDTO implements Serializable {
     /**
-     * 源站业务 ID。
+     * 源站技能记录 id，用于区分各档气力必杀并匹配 enrichment。
      **/
     private Long id;
     /**
-     * 源技能业务 ID，必杀技对应源站 skill_id。
+     * 源站 skill_id 效果编号，可被不同必杀记录共用，不能用作记录唯一标识。
      **/
     private Long skillId;
     /**
@@ -48,6 +48,10 @@ public class KxWikiSkillDTO implements Serializable {
      * 保留源站占位符的描述模板，展示时优先使用。
      **/
     private String descriptionTemplate;
+    /**
+     * 当前技能关联的领域，保留展开与依赖关系。
+     **/
+    private List<KxWikiDomainDTO> domains;
     /**
      * 技能发动条件的普通文本。
      **/

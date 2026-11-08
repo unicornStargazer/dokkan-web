@@ -5,7 +5,7 @@ import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
 import org.springframework.stereotype.Component;
 
 /**
- * 卡片限定标记规则：人工值优先，自动规则仅设置 UR cost 48/58 的祭限定。
+ * 卡片限定标记规则：人工值优先，自动规则仅设置 UR cost 48/58 的限定。
  **/
 @Component
 public class CardTagRuleService {
@@ -23,7 +23,7 @@ public class CardTagRuleService {
     }
 
     /**
-     * 按人工锁定、UR 稀有度及限定 cost 依次判断是否自动设置祭限定。
+     * 按人工锁定、UR 稀有度及限定 cost 依次判断是否自动设置限定。
      **/
     private boolean shouldApplyDokkanFesTag(CardPO card) {
         if (Boolean.TRUE.equals(card.getTagLocked())) {

@@ -89,11 +89,11 @@ public class CardPO extends BasePO {
      **/
     private Boolean sezaFlag;
     /**
-     * 祭限定标记。
+     * 限定标记。
      **/
     private Boolean dokkanFesFlag;
     /**
-     * 嘉年华标记。
+     * 祭限定标记。
      **/
     private Boolean carnivalFlag;
     /**

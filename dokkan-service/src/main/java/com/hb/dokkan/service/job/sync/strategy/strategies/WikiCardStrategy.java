@@ -7,7 +7,9 @@ import com.hb.dokkan.common.domain.dto.data.kx.*;
 import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.config.data.WikiCardFilter;
+import com.hb.dokkan.config.kx.KxWikiProperties;
 import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
+import com.hb.dokkan.infrastructure.mysql.sync.KxWikiSyncRepository;
 import com.hb.dokkan.service.client.KxWikiClient;
 import com.hb.dokkan.service.convert.KxWikiCardConvert;
 import com.hb.dokkan.service.job.sync.SyncProgressContext;
@@ -19,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -51,11 +54,18 @@ public class WikiCardStrategy implements WikiInfoStrategy {
     @Resource
     private WikiCardFilter cardFilter;
     /**
-     * 只有 MySQL 和 ES 全部成功后才确认源水位。
+     * 按地区和语言隔离同步状态的源站配置。
      **/
-    private volatile String lastUpdatedAt;
+    @Resource
+    private KxWikiProperties properties;
     /**
-     * ES 或持久化失败的根卡，即使 flags 相同也必须在下一轮重试。
+     * 整个数据源成功版本的持久化仓储，服务重启后恢复源站更新时间。
+     **/
+    @Resource
+    private KxWikiSyncRepository syncRepository;
+
+    /**
+     * 单卡待重试集合，仅在当前进程中保留，不写入数据库。
      **/
     private final Set<Long> pendingCardIds = ConcurrentHashMap.newKeySet();
 
@@ -72,22 +82,34 @@ public class WikiCardStrategy implements WikiInfoStrategy {
      **/
     @Override
     public void execute(WikiContext context) {
+        execute(context, context.getCardData()::add);
+    }
+
+    /**
+     * 逐卡交给调用方处理，避免全量重新抓取时把所有详情聚合保留在内存中。
+     *
+     * @param context 同步模式、源版本和失败卡片上下文
+     * @param cardConsumer 单卡抓取成功后的处理逻辑，异常会记录为该卡失败
+     **/
+    public void execute(WikiContext context, Consumer<KxWikiCardBO> cardConsumer) {
         String updatedAt = client.getStatus().map(KxWikiStatusDTO::getUpdatedAt)
                 .filter(value -> !value.isBlank()).orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
-        if (Objects.equals(updatedAt, lastUpdatedAt) && pendingCardIds.isEmpty()) {
+        String syncKey = syncKey();
+        if (shouldSkipUnchangedVersion(context.isForce(), updatedAt, syncKey)) {
             return;
         }
         context.setSourceUpdatedAt(updatedAt);
         List<KxWikiCardListItemDTO> catalog = readCatalog();
-        Map<Long, CardPO> existing = cardRepository.listSyncFlags().stream()
+        Map<Long, CardPO> existing = context.isForce() ? Map.of() : cardRepository.listSyncFlags().stream()
                 .collect(Collectors.toMap(CardPO::getCardId, Function.identity()));
-        List<Long> candidates = catalog.stream().filter(item -> isCandidate(item, existing.get(item.getId())))
+        List<Long> candidates = catalog.stream()
+                .filter(item -> context.isForce() || isCandidate(item, existing.get(item.getId())))
                 .map(KxWikiCardListItemDTO::getId).distinct().toList();
         for (int index = 0; index < candidates.size(); index++) {
             Long cardId = candidates.get(index);
             pendingCardIds.add(cardId);
             try {
-                context.getCardData().add(fetchCard(cardId, false));
+                cardConsumer.accept(fetchCard(cardId, false));
             } catch (RuntimeException exception) {
                 context.getFailedCardIds().add(cardId);
                 log.error("KX Wiki card failed, cardId={}", cardId, exception);
@@ -96,6 +118,19 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                             + (index + 1) * CardSyncConstants.SYNC_PROGRESS_EXTERNAL_SPAN / Math.max(candidates.size(), 1),
                     CardSyncConstants.STAGE_FETCH_EXTERNAL,
                     CardSyncConstants.MESSAGE_KX_FETCH_PROGRESS + (index + 1) + CardSyncConstants.PATH_SEPARATOR + candidates.size());
+        }
+    }
+
+    /**
+     * 全量抓取不受成功版本短路影响；增量保留既有版本及待重试判断。
+     **/
+    private boolean shouldSkipUnchangedVersion(boolean force, String updatedAt, String syncKey) {
+        if (force) {
+            return false;
+        } else if (!Objects.equals(updatedAt, syncRepository.findLastUpdatedAt(syncKey))) {
+            return false;
+        } else {
+            return pendingCardIds.isEmpty();
         }
     }
 
@@ -118,19 +153,27 @@ public class WikiCardStrategy implements WikiInfoStrategy {
     }
 
     /**
-     * 确认已完成的根卡，确保 ES 失败时可重放整个聚合。
+     * MySQL及ES成功后，从当前进程的单卡重试集合中移除该卡。
      **/
     public void markCardComplete(Long cardId) {
         pendingCardIds.remove(cardId);
     }
 
     /**
-     * 仅成功轮次确认源版本；失败卡仍在 pending 中，后续不会 status 短路。
+     * 仅在本轮没有待重试卡片时，持久化整个数据源的成功更新时间。
      **/
     public void markVersionComplete(String updatedAt) {
         if (pendingCardIds.isEmpty() && updatedAt != null) {
-            lastUpdatedAt = updatedAt;
+            syncRepository.confirmVersion(syncKey(), updatedAt);
         }
+    }
+
+    /**
+     * 为不同地区及语言生成稳定的持久化同步范围。
+     **/
+    private String syncKey() {
+        return String.format(CardSyncConstants.KX_WIKI_CARD_SYNC_KEY_FORMAT,
+                properties.getRegion(), properties.getLang());
     }
 
     /**
@@ -151,7 +194,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
     }
 
     /**
-     * 新卡、待重试、缺少 hash 或极限标记变化时需要抓取详情。
+     * 新卡、进程内待重试卡、缺少hash或极限标记变化时抓取详情。
      **/
     private boolean isCandidate(KxWikiCardListItemDTO source, CardPO existing) {
         if (existing == null) {

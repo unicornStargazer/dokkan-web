@@ -8,6 +8,11 @@ package com.hb.dokkan.common.constants;
 public final class CardSyncConstants {
 
     /**
+     * 持久化同步范围格式，按地区和语言隔离卡片版本及重试记录。
+     **/
+    public static final String KX_WIKI_CARD_SYNC_KEY_FORMAT = "kx-wiki:cards:%s:%s";
+
+    /**
      * 分页防护上限，避免上游异常导致无限扫描。
      **/
     public static final int KX_WIKI_MAX_PAGES = 200;
@@ -31,6 +36,14 @@ public final class CardSyncConstants {
      * 必杀额外加成字段。
      **/
     public static final String SKILL_BONUSES_FIELD = "bonuses";
+    /**
+     * 必杀技共用的源站 skill_id 效果编号；记录唯一标识使用源站 id。
+     **/
+    public static final String SKILL_EFFECT_ID_FIELD = "effectSkillId";
+    /**
+     * 状态及技能扩展属性中的领域列表字段。
+     **/
+    public static final String SKILL_DOMAINS_FIELD = "domains";
     /**
      * 技能发动次数限制字段。
      **/

@@ -41,7 +41,7 @@ public class KxWikiStateDTO implements Serializable {
      **/
     private KxWikiTextDTO leader;
     /**
-     * 当前状态被动技能信息。
+     * 当前状态被动技能信息；为空表示该卡片或形态在此状态没有被动。
      **/
     private KxWikiTextDTO passive;
     /**

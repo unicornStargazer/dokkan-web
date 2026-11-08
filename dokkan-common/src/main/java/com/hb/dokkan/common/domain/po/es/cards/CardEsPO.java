@@ -103,6 +103,12 @@ public class CardEsPO implements Serializable {
     private String activeSkill;
 
     /**
+     * 各觉醒状态的独立详情，按 base、eza、seza 排列。
+     **/
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = CardEsStateDTO.class)
+    private List<CardEsStateDTO> states;
+
+    /**
      * 免费标志
      **/
     private Boolean freeCardFlag;

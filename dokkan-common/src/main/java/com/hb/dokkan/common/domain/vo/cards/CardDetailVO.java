@@ -1,6 +1,7 @@
 package com.hb.dokkan.common.domain.vo.cards;
 
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPotentialDTO;
+import com.hb.dokkan.common.domain.po.es.cards.CardEsStateDTO;
 import com.hb.dokkan.common.domain.vo.skill.SkillVO;
 import com.hb.dokkan.common.domain.vo.special.SpecialVO;
 import lombok.Data;
@@ -85,6 +86,11 @@ public class CardDetailVO implements Serializable {
      * 主动技效果
      **/
     private String activeSkill;
+
+    /**
+     * 各觉醒状态的独立详情，旧索引尚未同步时为空。
+     **/
+    private List<CardEsStateDTO> states;
 
     /**
      * 免费标志

@@ -1,8 +1,11 @@
 package com.hb.dokkan.common.domain.po.es.cards;
 
 import lombok.Data;
+import org.dromara.easyes.annotation.IndexField;
+import org.dromara.easyes.annotation.rely.FieldType;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * ES 专用必杀嵌套文档，避免索引模型依赖 MySQL PO。
@@ -17,6 +20,11 @@ public class CardEsSpecialDTO implements Serializable {
      * 必杀名称和效果合并后的展示文本。
      **/
     private String description;
+    /**
+     * 当前必杀关联的领域，缺省时为空列表。
+     **/
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = CardEsDomainDTO.class)
+    private List<CardEsDomainDTO> domains;
     /**
      * 技能基础伤害倍率，沿用源站数值单位。
      **/

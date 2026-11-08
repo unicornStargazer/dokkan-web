@@ -100,6 +100,8 @@ public class EsCardSyncHelper {
             document.setPotentials(convert.potentials(card.getPotential()));
             applyStates(document, states.getOrDefault(card.getCardId(), List.of()));
             applySkills(document, skills.getOrDefault(card.getCardId(), List.of()));
+            document.setStates(convert.statesToEs(states.getOrDefault(card.getCardId(), List.of()),
+                    skills.getOrDefault(card.getCardId(), List.of())));
             document.setCategories(categoryByCard.getOrDefault(card.getCardId(), List.of()).stream()
                     .map(CardCategoryRelPO::getCategoryId).map(categoryNames::get).filter(Objects::nonNull)
                     .collect(Collectors.joining(CardSyncConstants.DISPLAY_NAME_SEPARATOR)));

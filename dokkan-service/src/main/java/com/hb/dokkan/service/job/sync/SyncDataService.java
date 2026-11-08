@@ -114,18 +114,28 @@ public class SyncDataService {
      * 增量同步 UR/LR，本轮失败不阻断其他卡入库，也不确认源版本。
      **/
     public void initCard() {
+        initCard(false);
+    }
+
+    /**
+     * 增量或全量重新抓取所有纳入同步的本体及形态卡，人工标签仍按原记录合并。
+     *
+     * @param force true 时忽略源版本、候选变化及相同 hash，强制重写已解析的子表
+     **/
+    public void initCard(boolean force) {
         WikiContext context = new WikiContext();
-        cardStrategy.execute(context);
-        for (KxWikiCardBO aggregate : context.getCardData()) {
+        context.setForce(force);
+        // 抓取一张就提交一张，失败隔离到本体，不累积整库详情。
+        cardStrategy.execute(context, aggregate -> {
             Long rootId = aggregate.getCards().getFirst().getCardId();
             try {
-                persistCardData(aggregate, false);
+                persistCardData(aggregate, force);
                 cardStrategy.markCardComplete(rootId);
             } catch (RuntimeException exception) {
                 context.getFailedCardIds().add(rootId);
                 log.error("KX Wiki persist or ES refresh failed, cardId={}", rootId, exception);
             }
-        }
+        });
         if (!context.getFailedCardIds().isEmpty()) {
             log.error("KX Wiki failed cardIds={}", context.getFailedCardIds());
             throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
@@ -163,8 +173,6 @@ public class SyncDataService {
      **/
     private void persistCardData(KxWikiCardBO aggregate, boolean force) {
         List<Long> ids = aggregate.getCards().stream().map(CardPO::getCardId).toList();
-        SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_MYSQL_WRITE,
-                CardSyncConstants.STAGE_WRITE_MYSQL, CardSyncConstants.MESSAGE_WRITE_CARD_DATA);
         try {
             transactionTemplate.executeWithoutResult(status -> {
                 Map<Long, CardPO> existing = cardRepository.lockByCardIds(ids).stream()
@@ -204,8 +212,7 @@ public class SyncDataService {
             log.error("KX Wiki transaction rolled back, cardIds={}", ids, exception);
             throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR, exception);
         }
-        SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ES_SYNC,
-                CardSyncConstants.STAGE_SYNC_ES, CardSyncConstants.MESSAGE_UPDATE_ES_DOCUMENT);
+        // 逐卡同步进度由调用方按已处理卡数上报，避免每张卡将总进度跳到固定百分比。
         syncEsCardsByCardIds(ids);
     }
 

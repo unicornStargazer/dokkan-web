@@ -24,12 +24,20 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class SyncProgressService {
 
-    /** 同步任务快照缓存，key 为 jobId。 */
+    /**
+     * 同步任务快照缓存，key 为 jobId。
+     **/
     private final Map<String, SyncProgressResponse> jobs = new ConcurrentHashMap<>();
 
+    /**
+     * 实际执行卡片抓取和持久化的同步服务。
+     **/
     @Resource
     private SyncDataService syncDataService;
 
+    /**
+     * 后台同步任务使用的业务线程池。
+     **/
     @Resource
     private DokkanThreadPoolExecutor executor;
 
@@ -47,7 +55,8 @@ public class SyncProgressService {
         jobs.put(jobId, progress);
 
         // 将实际同步提交到业务线程池，接口立即返回 jobId 供前端轮询。
-        executor.execute(() -> run(jobId, type, request == null ? null : request.getCardIds()));
+        boolean force = request != null && Boolean.TRUE.equals(request.getForce());
+        executor.execute(() -> run(jobId, type, request == null ? null : request.getCardIds(), force));
         log.info("[sync-job:{}] accepted, type={}, total={}", jobId, type, progress.getTotal());
         return jobId;
     }
@@ -68,8 +77,9 @@ public class SyncProgressService {
      * @param jobId 同步任务 ID
      * @param type  同步类型
      * @param ids   手动同步卡片 ID 列表
+     * @param force 是否强制重新抓取全部卡片
      */
-    private void run(String jobId, String type, List<Long> ids) {
+    private void run(String jobId, String type, List<Long> ids, boolean force) {
         SyncProgressResponse progress = jobs.get(jobId);
         if (progress == null) {
             return;
@@ -83,7 +93,7 @@ public class SyncProgressService {
             update(progress, CardSyncConstants.SYNC_PROGRESS_START, CardSyncConstants.STAGE_PREPARE_SYNC,
                     CardSyncConstants.MESSAGE_INIT_SYNC_TASK);
             if (CardSyncConstants.SYNC_TYPE_MYSQL.equals(type)) {
-                runMysqlSync(progress);
+                runMysqlSync(progress, force);
             } else if (CardSyncConstants.SYNC_TYPE_ES.equals(type)) {
                 runEsSync(progress);
             } else {
@@ -107,14 +117,15 @@ public class SyncProgressService {
     }
 
     /**
-     * 执行 MySQL 增量同步任务。
+     * 执行 MySQL 增量或强制全量重新抓取任务。
      *
      * @param progress 进度快照
+     * @param force 是否强制重新抓取全部卡片
      */
-    private void runMysqlSync(SyncProgressResponse progress) {
+    private void runMysqlSync(SyncProgressResponse progress, boolean force) {
         update(progress, CardSyncConstants.SYNC_PROGRESS_FETCH_START, CardSyncConstants.STAGE_FETCH_EXTERNAL,
                 CardSyncConstants.MESSAGE_FETCH_DOKKAN_DB);
-        syncDataService.initCard();
+        syncDataService.initCard(force);
         update(progress, CardSyncConstants.SYNC_PROGRESS_FINAL_CHECK, CardSyncConstants.STAGE_FINAL_CHECK,
                 CardSyncConstants.MESSAGE_FINAL_CHECK);
     }
@@ -198,15 +209,38 @@ public class SyncProgressService {
      * @param request 同步启动请求
      */
     private void validateSyncRequest(String type, SyncStartRequest request) {
-        if (!(CardSyncConstants.SYNC_TYPE_MYSQL.equals(type)
-                || CardSyncConstants.SYNC_TYPE_ES.equals(type)
-                || CardSyncConstants.SYNC_TYPE_MANUAL.equals(type))) {
+        if (!isSupportedSyncType(type)) {
             throw new DokkanBizException(CardSyncConstants.SYNC_TYPE_ERROR_MESSAGE);
         }
         List<Long> ids = request == null ? null : request.getCardIds();
-        if (CardSyncConstants.SYNC_TYPE_MANUAL.equals(type)
-                && (CollectionUtils.isEmpty(ids) || ids.size() > CardSyncConstants.MANUAL_SYNC_MAX_CARD_COUNT)) {
+        if (isInvalidManualSyncRequest(type, ids)) {
             throw new DokkanBizException(CardSyncConstants.MANUAL_SYNC_ERROR_MESSAGE);
+        }
+    }
+
+    /**
+     * 手动补录逐项校验列表是否为空及数量上限，其他同步类型不检查 ID。
+     **/
+    private boolean isInvalidManualSyncRequest(String type, List<Long> ids) {
+        if (!CardSyncConstants.SYNC_TYPE_MANUAL.equals(type)) {
+            return false;
+        } else if (CollectionUtils.isEmpty(ids)) {
+            return true;
+        } else {
+            return ids.size() > CardSyncConstants.MANUAL_SYNC_MAX_CARD_COUNT;
+        }
+    }
+
+    /**
+     * 逐项判断支持的任务类型，避免把多项布尔判断堆在请求校验中。
+     **/
+    private boolean isSupportedSyncType(String type) {
+        if (CardSyncConstants.SYNC_TYPE_MYSQL.equals(type)) {
+            return true;
+        } else if (CardSyncConstants.SYNC_TYPE_ES.equals(type)) {
+            return true;
+        } else {
+            return CardSyncConstants.SYNC_TYPE_MANUAL.equals(type);
         }
     }
 

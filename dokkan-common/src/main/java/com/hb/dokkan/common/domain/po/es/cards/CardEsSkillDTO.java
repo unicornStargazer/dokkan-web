@@ -1,8 +1,11 @@
 package com.hb.dokkan.common.domain.po.es.cards;
 
 import lombok.Data;
+import org.dromara.easyes.annotation.IndexField;
+import org.dromara.easyes.annotation.rely.FieldType;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * ES 专用技能嵌套文档，避免索引模型依赖 MySQL PO。
@@ -26,7 +29,12 @@ public class CardEsSkillDTO implements Serializable {
      **/
     private String effectDescription;
     /**
-     * 技能类型标记：standby 或 finish。
+     * 当前技能关联的领域，包含展开及依赖标记。
+     **/
+    @IndexField(fieldType = FieldType.NESTED, nestedOrObjectClass = CardEsDomainDTO.class)
+    private List<CardEsDomainDTO> domains;
+    /**
+     * 技能类型标记：active、standby 或 finish。
      **/
     private String label;
     /**

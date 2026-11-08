@@ -20,11 +20,11 @@ public class CardTagBatchRequest implements Serializable {
      **/
     private List<Long> cardIds;
     /**
-     * 祭限定标记，null 表示不修改。
+     * 限定标记，null 表示不修改。
      **/
     private Boolean dokkanFesFlag;
     /**
-     * 嘉年华标记，null 表示不修改。
+     * 祭限定标记，null 表示不修改。
      **/
     private Boolean carnivalFlag;
     /**
