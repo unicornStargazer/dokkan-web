@@ -19,20 +19,32 @@ public class WikiCardFilter {
 
     /**
      * wiki卡片黑名单
-     */
+     **/
     private String blackCardId;
 
 
     /**
      * wiki卡片白名单名单
-     */
+     **/
     private String whiteCardId;
 
+    /**
+     * 读取黑名单；未配置时返回空集合。
+     **/
     public List<Long> getWikiCardBlackList() {
+        if (blackCardId == null || blackCardId.isBlank()) {
+            return List.of();
+        }
         return Lists.newArrayList(blackCardId.split(",")).stream().map(Long::valueOf).toList();
     }
 
+    /**
+     * 读取手动白名单，未配置时返回空集合。
+     **/
     public List<Long> getWikiCardWhiteList() {
+        if (whiteCardId == null || whiteCardId.isBlank()) {
+            return List.of();
+        }
         return Lists.newArrayList(whiteCardId.split(",")).stream().map(Long::valueOf).toList();
     }
 }

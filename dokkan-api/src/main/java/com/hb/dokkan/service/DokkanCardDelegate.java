@@ -3,9 +3,8 @@ package com.hb.dokkan.service;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
-import com.hb.dokkan.common.domain.request.cards.CardIdSyncRequest;
 import com.hb.dokkan.common.domain.request.cards.CardQueryRequest;
-import com.hb.dokkan.common.domain.request.cards.CardRetranslateRequest;
+import com.hb.dokkan.common.domain.request.cards.CardTagBatchRequest;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.domain.response.base.PageResponse;
 import com.hb.dokkan.common.domain.response.cards.CardDetailResponse;
@@ -29,9 +28,15 @@ import java.util.Objects;
 @Service
 public class DokkanCardDelegate {
 
+    /**
+     * 卡片查询参数及展示响应转换器。
+     **/
     @Resource
     private DokkanCardConvert dokkanCardConvert;
 
+    /**
+     * 卡片查询及人工标签业务服务。
+     **/
     @Resource
     private DokkanCardService cardService;
 
@@ -40,7 +45,7 @@ public class DokkanCardDelegate {
      *
      * @param request 卡片查询请求
      * @return 卡片分页列表响应
-     */
+     **/
     public DokkanResponse<PageResponse<CardListResponse>> cardList(CardQueryRequest request) {
         if (Objects.isNull(request)) {
             throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
@@ -63,54 +68,11 @@ public class DokkanCardDelegate {
     }
 
     /**
-     * 重新翻译单张卡片，负责参数校验、请求转换和响应封装。
-     *
-     * @param request 单卡重新翻译请求
-     * @return 最新卡片详情响应
-     */
-    public DokkanResponse<CardDetailResponse> retranslate(CardRetranslateRequest request) {
-        if (Objects.isNull(request) || Objects.isNull(request.getCardId())
-                || request.getCardId() <= CardSyncConstants.MIN_VALID_CARD_ID) {
-            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
-        }
-        CardDetailVO cardDetailVO = cardService.retranslateCard(request.getCardId());
-        CardDetailResponse response = dokkanCardConvert.detailVoToResponse(cardDetailVO);
-        return DokkanResponse.<CardDetailResponse>builder()
-                .withModel(response)
-                .success();
-    }
-
-    /**
-     * 批量重新翻译卡片，负责参数校验和响应封装。
-     *
-     * @param request 批量卡片 ID 请求
-     * @return 成功重新翻译数量响应
-     */
-    public DokkanResponse<Integer> retranslateBatch(CardIdSyncRequest request) {
-        if (Objects.isNull(request) || Objects.isNull(request.getCardIds())) {
-            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
-        }
-        // 过滤非法 ID 并按原始勾选顺序去重，避免同一张卡重复触发外部 LLM。
-        List<Long> cardIds = request.getCardIds().stream()
-                .filter(Objects::nonNull)
-                .filter(cardId -> cardId > CardSyncConstants.MIN_VALID_CARD_ID)
-                .distinct()
-                .toList();
-        if (cardIds.isEmpty() || cardIds.size() > CardSyncConstants.MANUAL_SYNC_MAX_CARD_COUNT) {
-            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
-        }
-        Integer count = cardService.retranslateCards(cardIds);
-        return DokkanResponse.<Integer>builder()
-                .withModel(count)
-                .success();
-    }
-
-    /**
      * 查询卡片详情，负责参数校验、请求转换和响应封装。
      *
      * @param request 卡片查询请求
      * @return 卡片详情响应
-     */
+     **/
     public DokkanResponse<CardDetailResponse> cardDetail(CardQueryRequest request) {
         if (Objects.isNull(request) || Objects.isNull(request.getCardId())) {
             throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
@@ -121,5 +83,46 @@ public class DokkanCardDelegate {
         return DokkanResponse.<CardDetailResponse>builder()
                 .withModel(response)
                 .success();
+    }
+    /**
+     * 校验至少一个非空标签以及去重后 1–500 个正整数卡片 ID。
+     **/
+    public DokkanResponse<Integer> batchUpdateTags(CardTagBatchRequest request) {
+        if (!isValidTagRequest(request)) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
+        return DokkanResponse.<Integer>builder().withModel(cardService.batchUpdateTags(request)).success();
+    }
+
+    /**
+     * 逐项检查卡片 ID 与标签，保持先判空再访问字段的短路顺序。
+     **/
+    private boolean isValidTagRequest(CardTagBatchRequest request) {
+        if (request == null) {
+            return false;
+        } else if (request.getCardIds() == null) {
+            return false;
+        } else if (request.getCardIds().isEmpty()) {
+            return false;
+        } else if (request.getCardIds().stream().anyMatch(id -> id == null || id <= CardSyncConstants.MIN_VALID_CARD_ID)) {
+            return false;
+        } else if (request.getCardIds().stream().distinct().count() > CardSyncConstants.CARD_TAG_BATCH_MAX_COUNT) {
+            return false;
+        } else {
+            return hasTagChanges(request);
+        }
+    }
+
+    /**
+     * 至少一个标签显式传值才允许更新，false 同样代表有效修改。
+     **/
+    private boolean hasTagChanges(CardTagBatchRequest request) {
+        if (request.getDokkanFesFlag() != null) {
+            return true;
+        } else if (request.getCarnivalFlag() != null) {
+            return true;
+        } else {
+            return request.getFreeCardFlag() != null;
+        }
     }
 }

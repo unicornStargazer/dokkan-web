@@ -10,7 +10,6 @@ import com.hb.dokkan.common.domain.response.category.CategoryResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
 import com.hb.dokkan.service.convert.DokkanCategoryConvert;
-import com.hb.dokkan.translation.BusinessTranslationService;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -27,21 +26,25 @@ import java.util.Objects;
 @Service
 public class DokkanCategoryService {
 
+    /**
+     * 分类字典访问仓储。
+     **/
     @Resource
     private DokkanCategoryRepository categoryRepository;
 
+    /**
+     * 分类请求、持久化对象及响应转换器。
+     **/
     @Resource
     private DokkanCategoryConvert categoryConvert;
 
-    @Resource
-    private BusinessTranslationService translationService;
 
     /**
      * 分页查询分类列表。
      *
      * @param request 查询请求
      * @return 分类分页响应
-     */
+     **/
     public PageResponse<CategoryResponse> queryPage(CategoryQueryRequest request) {
         PageResponse<DokkanCategoryPO> page = categoryRepository.queryPage(request);
         return PageResponse.<CategoryResponse>builder()
@@ -53,11 +56,11 @@ public class DokkanCategoryService {
     }
 
     /**
-     * 新增或编辑分类，并刷新本地分类翻译术语。
+     * 新增或编辑分类，人工中文名称由后续 reference 同步保留。
      *
      * @param request 分类保存请求
      * @return 保存后的分类响应
-     */
+     **/
     @Transactional(rollbackFor = Exception.class)
     public CategoryResponse save(CategorySaveRequest request) {
         checkSaveRequest(request);
@@ -66,7 +69,6 @@ public class DokkanCategoryService {
         DokkanCategoryPO category = categoryConvert.saveRequestToPo(request);
         normalizeSaveFields(category);
         categoryRepository.saveOrUpdate(category);
-        translationService.refreshGlossary();
         return categoryConvert.poToResponse(categoryRepository.getById(category.getId()));
     }
 
@@ -74,12 +76,9 @@ public class DokkanCategoryService {
      * 校验分类保存请求必填项和长度限制。
      *
      * @param request 分类保存请求
-     */
+     **/
     private void checkSaveRequest(CategorySaveRequest request) {
-        if (Objects.isNull(request)
-                || Objects.isNull(request.getCategoryId())
-                || request.getCategoryId() <= CategoryConstants.MIN_VALID_CATEGORY_ID
-                || StringUtils.isBlank(request.getCategoryName())) {
+        if (!hasRequiredCategoryFields(request)) {
             throw new DokkanBizException(ExceptionErrorCode.CATEGORY_PARAM_ERROR);
         }
         if (request.getCategoryName().length() > CategoryConstants.CATEGORY_NAME_MAX_LENGTH
@@ -89,10 +88,25 @@ public class DokkanCategoryService {
     }
 
     /**
+     * 依次校验分类请求、业务 ID 与中文名，长度限制由调用方继续检查。
+     **/
+    private boolean hasRequiredCategoryFields(CategorySaveRequest request) {
+        if (Objects.isNull(request)) {
+            return false;
+        } else if (Objects.isNull(request.getCategoryId())) {
+            return false;
+        } else if (request.getCategoryId() <= CategoryConstants.MIN_VALID_CATEGORY_ID) {
+            return false;
+        } else {
+            return StringUtils.isNotBlank(request.getCategoryName());
+        }
+    }
+
+    /**
      * 编辑分类时校验原记录存在，避免误新增重复数据。
      *
      * @param request 分类保存请求
-     */
+     **/
     private void checkExistingCategory(CategorySaveRequest request) {
         if (StringUtils.isBlank(request.getId())) {
             return;
@@ -104,10 +118,10 @@ public class DokkanCategoryService {
     }
 
     /**
-     * 校验 DokkanDB 分类 ID 不与其他分类重复。
+     * 校验分类业务 ID 不与其他分类重复。
      *
      * @param request 分类保存请求
-     */
+     **/
     private void checkDuplicateCategoryId(CategorySaveRequest request) {
         List<DokkanCategoryPO> existingCategories = categoryRepository.listByCategoryId(request.getCategoryId());
         boolean duplicated = existingCategories.stream()
@@ -118,10 +132,10 @@ public class DokkanCategoryService {
     }
 
     /**
-     * 归一化分类保存字段，避免空白字符进入术语映射。
+     * 归一化分类保存字段，避免名称含多余空白字符。
      *
      * @param category 分类数据库对象
-     */
+     **/
     private void normalizeSaveFields(DokkanCategoryPO category) {
         category.setCategoryName(category.getCategoryName().trim());
         category.setCategoryNameEn(StringUtils.trimToNull(category.getCategoryNameEn()));

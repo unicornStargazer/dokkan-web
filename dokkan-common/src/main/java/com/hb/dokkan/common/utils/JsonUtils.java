@@ -32,10 +32,14 @@ import java.util.Objects;
 @Slf4j
 public class JsonUtils {
 
-    /** Jackson ObjectMapper 统一实例，避免业务代码直接依赖第三方 JSON API。 */
+    /**
+     * Jackson ObjectMapper 统一实例，避免业务代码直接依赖第三方 JSON API。
+     **/
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    /** JSON 数组首个元素下标，用于读取外部接口首选结果。 */
+    /**
+     * JSON 数组首个元素下标，用于读取外部接口首选结果。
+     **/
     private static final int FIRST_ARRAY_INDEX = 0;
 
     /**
@@ -43,7 +47,7 @@ public class JsonUtils {
      *
      * @param value    待写入对象
      * @param filePath 文件路径
-     */
+     **/
     public static void writeJson2File(Object value, String filePath) {
         if (ObjectUtils.isEmpty(value) || StringUtils.isBlank(filePath)) {
             return;
@@ -56,7 +60,7 @@ public class JsonUtils {
      *
      * @param value 待写入对象
      * @param path  文件路径
-     */
+     **/
     public static void writeJson2File(Object value, Path path) {
         if (ObjectUtils.isEmpty(value) || Objects.isNull(path)) {
             return;
@@ -69,7 +73,7 @@ public class JsonUtils {
      *
      * @param value 待写入对象
      * @param file  目标文件
-     */
+     **/
     public static void writeJson2File(Object value, File file) {
         if (ObjectUtils.isEmpty(value) || Objects.isNull(file)) {
             return;
@@ -94,7 +98,7 @@ public class JsonUtils {
      * @param <K>       key 泛型
      * @param <V>       value 泛型
      * @return Map 列表
-     */
+     **/
     public static <K, V> List<Map<K, V>> json2ListMap(String json, Class<K> keyType, Class<V> valueType) {
         if (StringUtils.isBlank(json)) {
             return Lists.newArrayList();
@@ -118,7 +122,7 @@ public class JsonUtils {
      * @param <K>       key 泛型
      * @param <V>       value 泛型
      * @return Map 结果
-     */
+     **/
     public static <K, V> Map<K, V> json2Map(String jsonStr, Class<K> keyType, Class<V> valueType) {
         if (StringUtils.isBlank(jsonStr)) {
             return Maps.newHashMap();
@@ -139,7 +143,7 @@ public class JsonUtils {
      * @param clazz   目标类型
      * @param <T>     目标泛型
      * @return 转换后的对象
-     */
+     **/
     public static <T> T json2Object(String jsonStr, Class<T> clazz) {
         if (StringUtils.isBlank(jsonStr) || ObjectUtils.isEmpty(clazz)) {
             return null;
@@ -159,7 +163,7 @@ public class JsonUtils {
      * @param elementClass 列表元素类型
      * @param <T>          元素泛型
      * @return 对象列表
-     */
+     **/
     public static <T> List<T> json2List(String jsonString, Class<T> elementClass) {
         if (StringUtils.isBlank(jsonString) || Objects.isNull(elementClass)) {
             return Collections.emptyList();
@@ -179,7 +183,7 @@ public class JsonUtils {
      *
      * @param value 待序列化对象
      * @return JSON 字符串
-     */
+     **/
     public static String object2Json(Object value) {
         if (Objects.isNull(value)) {
             return null;
@@ -201,7 +205,7 @@ public class JsonUtils {
      * @param <K>       key 泛型
      * @param <V>       value 泛型
      * @return Map 结果
-     */
+     **/
     public static <K, V> Map<K, V> inputStream2Map(InputStream input, Class<K> keyType, Class<V> valueType) {
         if (Objects.isNull(input)) {
             return Collections.emptyMap();
@@ -222,7 +226,7 @@ public class JsonUtils {
      * @param clazz 目标类型
      * @param <T>   目标泛型
      * @return 读取后的对象
-     */
+     **/
     public static <T> T file2Object(Path path, Class<T> clazz) {
         if (Objects.isNull(path) || Objects.isNull(clazz)) {
             return null;
@@ -240,7 +244,7 @@ public class JsonUtils {
      *
      * @param path JSON 文件路径
      * @return String 到 Object 的 Map
-     */
+     **/
     public static Map<String, Object> file2StringObjectMap(Path path) {
         if (Objects.isNull(path)) {
             return Collections.emptyMap();
@@ -259,7 +263,7 @@ public class JsonUtils {
      *
      * @param value 待转换对象
      * @return String Map
-     */
+     **/
     public static Map<String, String> convert2StringMap(Object value) {
         if (Objects.isNull(value)) {
             return Collections.emptyMap();
@@ -273,7 +277,7 @@ public class JsonUtils {
      *
      * @param value 待转换对象
      * @return String 到 Object 的 Map
-     */
+     **/
     public static Map<String, Object> convert2StringObjectMap(Object value) {
         if (Objects.isNull(value)) {
             return Collections.emptyMap();
@@ -289,7 +293,7 @@ public class JsonUtils {
      * @param clazz 目标类型
      * @param <T>   目标泛型
      * @return 转换后的对象
-     */
+     **/
     public static <T> T convertValue(Object value, Class<T> clazz) {
         if (Objects.isNull(value) || Objects.isNull(clazz)) {
             return null;
@@ -304,7 +308,7 @@ public class JsonUtils {
      * @param arrayField 数组字段名
      * @param textField  数组元素中的文本字段名
      * @return 字段文本列表
-     */
+     **/
     public static List<String> readArrayFieldTexts(String json, String arrayField, String textField) {
         if (StringUtils.isAnyBlank(json, arrayField, textField)) {
             return Collections.emptyList();
@@ -333,7 +337,7 @@ public class JsonUtils {
      * @param objectField 数组首元素下的对象字段名
      * @param textField   文本字段名
      * @return 文本内容，不存在时返回 null
-     */
+     **/
     public static String readFirstArrayObjectText(String json, String arrayField, String objectField, String textField) {
         if (StringUtils.isAnyBlank(json, arrayField, objectField, textField)) {
             return null;
@@ -360,7 +364,7 @@ public class JsonUtils {
      * @param clazz       目标类型
      * @param <T>         目标泛型
      * @return 转换后的对象，字段不存在或为空时返回 null
-     */
+     **/
     public static <T> T readObjectField(String json, String objectField, Class<T> clazz) {
         if (StringUtils.isAnyBlank(json, objectField) || Objects.isNull(clazz)) {
             return null;
@@ -372,5 +376,79 @@ public class JsonUtils {
             log.error("json read object field fail, objectField={}, target={}", objectField, clazz.getName(), e);
             throw new DokkanSysException(e.getMessage());
         }
+    }
+    /**
+     * 将数组结构转换为明确类型列表；null 返回空列表，结构错误抛异常。
+     **/
+    public static <T> List<T> convertList(Object value, Class<T> itemType) {
+        if (value == null) {
+            return Collections.emptyList();
+        }
+        return OBJECT_MAPPER.convertValue(value, OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, itemType));
+    }
+
+    /**
+     * 在已解码 JSON 的文本值上做繁转简，保留结构、字段名、URL 和模板。
+     **/
+    public static String simplifyJsonText(String json) {
+        Object decoded = json2Object(json, Object.class);
+        return object2Json(simplifyValue(decoded));
+    }
+
+    /**
+     * 递归转换文本值；URL 属于资源标识，不做中文改写。
+     **/
+    private static Object simplifyValue(Object value) {
+        if (value instanceof String text) {
+            return text.startsWith("https://") || text.startsWith("http://")
+                    ? text : TranslationUtils.toSimpleChineseText(text);
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(JsonUtils::simplifyValue).toList();
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> converted = new java.util.LinkedHashMap<>();
+            map.forEach((key, entry) -> converted.put(key.toString(), simplifyValue(entry)));
+            return converted;
+        }
+        return value;
+    }
+
+    /**
+     * 计算多个 JSON 的稳定 SHA-256，递归排除 as_of，字段顺序不影响 hash。
+     **/
+    public static String sourceHash(String... jsonSources) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            for (String json : jsonSources) {
+                Object canonical = canonicalValue(json == null ? null : json2Object(json, Object.class));
+                byte[] bytes = object2Json(canonical == null ? Collections.emptyMap() : canonical)
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                digest.update(java.nio.ByteBuffer.allocate(Integer.BYTES).putInt(bytes.length).array());
+                digest.update(bytes);
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new DokkanSysException(exception.getMessage());
+        }
+    }
+
+    /**
+     * 对象字段排序、数组保序，过滤仅表示抓取时间的字段。
+     **/
+    private static Object canonicalValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> sorted = new java.util.TreeMap<>();
+            map.forEach((key, entry) -> {
+                if (!"as_of".equals(key.toString())) {
+                    sorted.put(key.toString(), canonicalValue(entry));
+                }
+            });
+            return sorted;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(JsonUtils::canonicalValue).toList();
+        }
+        return value;
     }
 }

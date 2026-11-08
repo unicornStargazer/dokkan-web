@@ -10,4 +10,5 @@
 .aone_copilot
 .gemini
 *.iml
+.codex
 /data/card-icons/

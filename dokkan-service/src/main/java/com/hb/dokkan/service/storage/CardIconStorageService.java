@@ -22,37 +22,49 @@ import java.nio.file.Path;
 @Component
 public class CardIconStorageService {
 
+    /**
+     * 头像缓存及 MinIO 对象存储配置。
+     **/
     @Resource
     private MinioStorageProperties minioStorageProperties;
 
+    /**
+     * 源站头像下载客户端。
+     **/
     @Resource
     private CardIconDownloadClient cardIconDownloadClient;
 
+    /**
+     * MinIO 桶和对象读写客户端。
+     **/
     @Resource
     private MinioStorageClient minioStorageClient;
 
-    /** MinIO bucket 是否已完成初始化。 */
+    /**
+     * MinIO bucket 是否已完成初始化。
+     **/
     private volatile boolean bucketReady = false;
 
     /**
      * 保存卡片头像并返回可访问 URL，MinIO 未启用时返回源站 URL。
      *
      * @param cardId 卡片 ID
+     * @param thumbnailUrl KX Wiki 返回的头像源地址
      * @return 头像 URL，下载失败时返回 null
-     */
-    public String saveCardIcon(Long cardId) {
-        if (cardId == null) {
+     **/
+    public String saveCardIcon(Long cardId, String thumbnailUrl) {
+        if (cardId == null || StringUtils.isBlank(thumbnailUrl)) {
             return null;
         }
         if (!Boolean.TRUE.equals(minioStorageProperties.getEnabled())) {
-            return buildSourceUrl(cardId);
+            return thumbnailUrl;
         }
         String objectName = buildObjectName(cardId);
         try {
             // 先确保 bucket 可用，再判断对象是否已经存在，避免重复下载上传。
             ensureBucketReady();
             if (!minioStorageClient.objectExists(objectName)) {
-                Path iconPath = downloadCardIconToLocal(cardId);
+                Path iconPath = downloadCardIconToLocal(cardId, thumbnailUrl);
                 if (iconPath == null) {
                     return null;
                 }
@@ -69,15 +81,16 @@ public class CardIconStorageService {
      * 下载卡片头像到本地缓存，缓存已存在时直接复用。
      *
      * @param cardId 卡片 ID
+     * @param thumbnailUrl KX Wiki 返回的头像源地址
      * @return 本地头像路径，下载失败时返回 null
      * @throws Exception 本地文件写入失败时抛出
-     */
-    private Path downloadCardIconToLocal(Long cardId) throws Exception {
+     **/
+    private Path downloadCardIconToLocal(Long cardId, String thumbnailUrl) throws Exception {
         Path iconPath = buildLocalIconPath(cardId);
         if (Files.exists(iconPath) && Files.size(iconPath) > 0) {
             return iconPath;
         }
-        byte[] iconBytes = cardIconDownloadClient.download(cardId, buildSourceUrl(cardId));
+        byte[] iconBytes = cardIconDownloadClient.download(cardId, thumbnailUrl);
         if (cardIconDownloadClient.isEmpty(iconBytes)) {
             log.warn("download card icon empty, cardId={}", cardId);
             return null;
@@ -91,7 +104,7 @@ public class CardIconStorageService {
      * 确保 MinIO bucket 已创建并设置公开读策略。
      *
      * @throws Exception bucket 初始化失败时抛出
-     */
+     **/
     private void ensureBucketReady() throws Exception {
         if (bucketReady) {
             return;
@@ -110,7 +123,7 @@ public class CardIconStorageService {
      *
      * @param cardId 卡片 ID
      * @return 对象名称
-     */
+     **/
     private String buildObjectName(Long cardId) {
         String prefix = StringUtils.stripEnd(minioStorageProperties.getCardIconPrefix(),
                 CardSyncConstants.PATH_SEPARATOR);
@@ -123,21 +136,10 @@ public class CardIconStorageService {
      *
      * @param cardId 卡片 ID
      * @return 本地缓存路径
-     */
+     **/
     private Path buildLocalIconPath(Long cardId) {
         return Path.of(minioStorageProperties.getCardIconCacheDir(), CardSyncConstants.CARD_ICON_DB_DIRECTORY,
                 cardId + CardSyncConstants.CARD_ICON_FILE_SUFFIX);
-    }
-
-    /**
-     * 构建卡片头像源站 URL。
-     *
-     * @param cardId 卡片 ID
-     * @return 源站 URL
-     */
-    private String buildSourceUrl(Long cardId) {
-        long dokkanDbCardId = cardId - CardSyncConstants.DOKKAN_DB_CARD_ID_OFFSET;
-        return String.format(CardSyncConstants.CARD_ICON_SOURCE_URL_TEMPLATE, dokkanDbCardId, dokkanDbCardId);
     }
 
     /**
@@ -145,7 +147,7 @@ public class CardIconStorageService {
      *
      * @param objectName 对象名称
      * @return 公开访问 URL
-     */
+     **/
     private String buildPublicUrl(String objectName) {
         String publicEndpoint = StringUtils.defaultIfBlank(
                 minioStorageProperties.getPublicEndpoint(),
@@ -160,7 +162,7 @@ public class CardIconStorageService {
      *
      * @param endpoint 原始端点
      * @return 规范化端点
-     */
+     **/
     private String normalizeEndpoint(String endpoint) {
         if (StringUtils.isBlank(endpoint)) {
             return endpoint;

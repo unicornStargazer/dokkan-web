@@ -24,17 +24,17 @@ import java.util.Objects;
 public interface DokkanCardConvert {
     /**
      * 卡片列表查询参数转换为DTO
-     */
+     **/
     CardQueryOptionDTO queryRequestToDto(CardQueryRequest request);
 
     /**
      * 卡片列表VO转换为响应
-     */
+     **/
     List<CardListResponse> listVoToResponseList(List<CardListVO> cardListVOS);
 
     /**
      * 卡片列表VO转换为响应
-     */
+     **/
     @Mappings({
             @Mapping(source = "categories", target = "categoryList", qualifiedByName = "convertStringToList"),
             @Mapping(source = "rarity", target = "rarity", qualifiedByName = "convertRarity"),
@@ -44,14 +44,17 @@ public interface DokkanCardConvert {
 
     /**
      * 卡片列表查询参数转换为es查询条件
-     */
+     **/
     CardQueryConditionDTO convertToEsQueryCondition(CardQueryOptionDTO queryOption);
 
     /**
      * es卡片列表PO转换为VO
-     */
+     **/
     List<CardListVO> convertToCardListVO(List<CardEsPO> cardEsPOS);
 
+    /**
+     * 将索引中的逗号分隔名称转换为展示列表，null 返回空列表。
+     **/
     @Named("convertStringToList")
     default List<String> convertStringToList(String str) {
         if (Objects.isNull(str)) {
@@ -60,6 +63,9 @@ public interface DokkanCardConvert {
         return Lists.newArrayList(str.split(","));
     }
 
+    /**
+     * 将数值稀有度转换为接口展示名称。
+     **/
     @Named("convertRarity")
     default String convertRarity(Integer rarity) {
         if (Objects.isNull(rarity)) {
@@ -70,11 +76,11 @@ public interface DokkanCardConvert {
 
     /**
      * 卡片详情VO转换为响应
-     */
+     **/
     CardDetailResponse detailVoToResponse(CardDetailVO cardDetailVO);
 
     /**
      * es卡片详情PO转换为VO
-     */
+     **/
     CardDetailVO convertToCardDetailVO(CardEsPO cardEsPO);
 }

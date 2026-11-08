@@ -2,16 +2,15 @@ package com.hb.dokkan.api.data;
 
 import com.hb.dokkan.common.domain.request.cards.CardIdSyncRequest;
 import com.hb.dokkan.common.domain.request.data.SyncStartRequest;
-import com.hb.dokkan.common.domain.request.data.TranslationRequest;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.domain.response.data.SyncProgressResponse;
 import com.hb.dokkan.common.utils.JsonUtils;
 import com.hb.dokkan.service.DokkanDataDelegate;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,6 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/data")
 public class DokkanDataApi {
 
+    /**
+     * 数据同步接口参数校验及响应编排服务。
+     **/
     @Resource
     private DokkanDataDelegate dataDelegate;
 
@@ -33,7 +35,7 @@ public class DokkanDataApi {
      * 同步 wiki 卡牌数据。
      *
      * @return 同步响应
-     */
+     **/
     @PostMapping("/init-card")
     public DokkanResponse initCard() {
         log.info("initCard request");
@@ -46,7 +48,7 @@ public class DokkanDataApi {
      * 同步 ES 卡牌数据。
      *
      * @return 同步响应
-     */
+     **/
     @PostMapping("/sync-es-card")
     public DokkanResponse syncEsCardData() {
         log.info("syncEsCardData request");
@@ -60,7 +62,7 @@ public class DokkanDataApi {
      *
      * @param request 卡片 ID 同步请求
      * @return 同步数量响应
-     */
+     **/
     @PostMapping("/sync-card-by-ids")
     public DokkanResponse<Integer> syncCardByIds(@RequestBody CardIdSyncRequest request) {
         log.info("syncCardByIds request:{}", JsonUtils.object2Json(request));
@@ -74,7 +76,7 @@ public class DokkanDataApi {
      *
      * @param request 同步启动请求
      * @return 后台任务 ID 响应
-     */
+     **/
     @PostMapping("/sync-start")
     public DokkanResponse<String> startSync(@RequestBody SyncStartRequest request) {
         log.info("startSync request:{}", JsonUtils.object2Json(request));
@@ -88,7 +90,7 @@ public class DokkanDataApi {
      *
      * @param jobId 后台任务 ID
      * @return 同步进度响应
-     */
+     **/
     @GetMapping("/sync-progress/{jobId}")
     public DokkanResponse<SyncProgressResponse> syncProgress(@PathVariable("jobId") String jobId) {
         log.info("syncProgress request, jobId:{}", jobId);
@@ -98,38 +100,10 @@ public class DokkanDataApi {
     }
 
     /**
-     * 使用 DokkanDB 同步链路的普通翻译能力翻译单条文本。
-     *
-     * @param request 翻译请求
-     * @return 翻译结果响应
-     */
-    @PostMapping("/translate")
-    public DokkanResponse<String> translate(@RequestBody TranslationRequest request) {
-        log.info("translate request:{}", JsonUtils.object2Json(request));
-        DokkanResponse<String> response = dataDelegate.translate(request);
-        log.info("translate response:{}", JsonUtils.object2Json(response));
-        return response;
-    }
-
-    /**
-     * 使用已配置的 OpenAI 兼容 LLM 翻译单条文本。
-     *
-     * @param request 翻译请求
-     * @return 翻译结果响应
-     */
-    @PostMapping("/translate/llm")
-    public DokkanResponse<String> translateByLlm(@RequestBody TranslationRequest request) {
-        log.info("translateByLlm request:{}", JsonUtils.object2Json(request));
-        DokkanResponse<String> response = dataDelegate.translateByLlm(request);
-        log.info("translateByLlm response:{}", JsonUtils.object2Json(response));
-        return response;
-    }
-
-    /**
      * 初始化分类数据。
      *
      * @return 初始化响应
-     */
+     **/
     @PostMapping("/init-category")
     public DokkanResponse initCategories() {
         log.info("initCategories request");
@@ -142,7 +116,7 @@ public class DokkanDataApi {
      * 初始化链接数据。
      *
      * @return 初始化响应
-     */
+     **/
     @PostMapping("/init-link")
     public DokkanResponse initLinks() {
         log.info("initLinks request");
@@ -151,17 +125,4 @@ public class DokkanDataApi {
         return response;
     }
 
-    /**
-     * 修复数据库数据。
-     *
-     * @param fixType 修复类型
-     * @return 修复响应
-     */
-    @GetMapping("/fix-db-data/{fixType}")
-    public DokkanResponse fixDbData(@PathVariable("fixType") Integer fixType) {
-        log.info("fixDbData request, fixType:{}", fixType);
-        DokkanResponse response = dataDelegate.fixDbData(fixType);
-        log.info("fixDbData response:{}", JsonUtils.object2Json(response));
-        return response;
-    }
 }

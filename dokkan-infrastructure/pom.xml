@@ -15,11 +15,6 @@
 
         <dependency>
             <groupId>com.hb.dokkan</groupId>
-            <artifactId>dokkan-translation</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.hb.dokkan</groupId>
             <artifactId>dokkan-common</artifactId>
             <exclusions>
                 <exclusion>

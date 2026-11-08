@@ -1,345 +1,195 @@
 package com.hb.dokkan.service.helper;
 
-import com.google.common.collect.Lists;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.EsCardAttributeKey;
-import com.hb.dokkan.common.constants.TranslationConstants;
-import com.hb.dokkan.common.domain.dto.cards.CardAttributeDTO;
-import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.EzaCardPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.SkillPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.SpecialPO;
-import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
+import com.hb.dokkan.common.domain.po.es.cards.*;
+import com.hb.dokkan.common.domain.po.mysql.cards.*;
 import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
+import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
+import com.hb.dokkan.common.enums.*;
 import com.hb.dokkan.common.utils.DateUtils;
 import com.hb.dokkan.common.utils.JsonUtils;
-import com.hb.dokkan.service.convert.DokkanEsSyncConvert;
+import com.hb.dokkan.infrastructure.mysql.cards.*;
+import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
+import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
+import com.hb.dokkan.service.convert.KxWikiEsConvert;
 import com.hb.dokkan.service.storage.CardIconStorageService;
 import jakarta.annotation.Resource;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
-import org.springframework.util.CollectionUtils;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.hb.dokkan.common.constants.DokkanConstants.CARD;
-import static com.hb.dokkan.common.constants.DokkanConstants.CATEGORY;
-import static com.hb.dokkan.common.constants.DokkanConstants.EZA_CARD;
-import static com.hb.dokkan.common.constants.DokkanConstants.LINK;
-import static com.hb.dokkan.common.constants.DokkanConstants.SKILL;
-import static com.hb.dokkan.common.constants.DokkanConstants.SPECIAL;
-
 /**
- * @Description es卡片同步助手
- * @Author stargazer
- * @Date 2025/10/18 17:42
+ * @Description 从新卡片表构建兼容 ES 文档，只读取本批卡片的子表
+ * @Author Codex
+ * @Date 2026/11/8
  **/
 @Component
-@Slf4j
 public class EsCardSyncHelper {
-
+    /**
+     * 卡片状态表访问仓储。
+     **/
     @Resource
-    private DokkanEsSyncConvert dokkanEsSyncConvert;
-
+    private CardStateRepository stateRepository;
+    /**
+     * 卡片技能表访问仓储。
+     **/
+    @Resource
+    private CardSkillRepository skillRepository;
+    /**
+     * 卡片分类关系表访问仓储。
+     **/
+    @Resource
+    private CardCategoryRelRepository categoryRelRepository;
+    /**
+     * 卡片链接关系表访问仓储。
+     **/
+    @Resource
+    private CardLinkRelRepository linkRelRepository;
+    /**
+     * 卡片主表访问仓储。
+     **/
+    @Resource
+    private DokkanCardRepository cardRepository;
+    /**
+     * 分类字典访问仓储。
+     **/
+    @Resource
+    private DokkanCategoryRepository categoryRepository;
+    /**
+     * 链接技能字典访问仓储。
+     **/
+    @Resource
+    private DokkanLinkRepository linkRepository;
+    /**
+     * 卡片主记录、技能与潜力到 ES 文档的转换器。
+     **/
+    @Resource
+    private KxWikiEsConvert convert;
+    /**
+     * 卡片头像下载及对象存储服务。
+     **/
     @Resource
     private CardIconStorageService cardIconStorageService;
 
     /**
-     * 构建 ES 卡片文档。
-     *
-     * @param dataMap MySQL 卡片及关联数据
-     * @return ES 卡片文档列表
-     */
-    public List<CardEsPO> buildEsCardPO(Map<String, List<?>> dataMap) {
-        List<CardEsPO> esCards = new ArrayList<>();
-        List<CardPO> cards = typedList(dataMap, CARD);
-        List<DokkanCategoryPO> categories = typedList(dataMap, CATEGORY);
-        List<DokkanLinkPO> links = typedList(dataMap, LINK);
-        List<EzaCardPO> ezaCardPOS = typedList(dataMap, EZA_CARD);
-        List<SpecialPO> specialPOS = typedList(dataMap, SPECIAL);
-        List<SkillPO> skillPOS = typedList(dataMap, SKILL);
-        if (CollectionUtils.isEmpty(cards)) {
-            return esCards;
-        }
-        cards.forEach(card -> {
-            CardEsPO esCardPO = new CardEsPO();
-            esCards.add(esCardPO);
-            esCardPO.setId(String.valueOf(card.getCardId()));
-            esCardPO.setCardId(card.getCardId());
-            esCardPO.setCardIcon(cardIconStorageService.saveCardIcon(card.getCardId()));
-            esCardPO.setCardName(card.getCardName());
-            esCardPO.setPropType(card.getPropType());
-            esCardPO.setTitle(card.getTitle());
-            esCardPO.setType(card.getType());
-            esCardPO.setCost(card.getCost());
-            esCardPO.setRarity(card.getRarity());
-            esCardPO.setHpValue(card.getHpValue());
-            esCardPO.setDefValue(card.getDefValue());
-            esCardPO.setAtkValue(card.getAtkValue());
-            esCardPO.setPublishTime(card.getPublishTime());
-            esCardPO.setOrderByTime(card.getPublishTime());
-            CardAttributeDTO attribute = JsonUtils.json2Object(card.getAttributes(), CardAttributeDTO.class);
-
-            // 按卡片属性中的关联 ID 组装分类、链接、技能、必杀等 ES 展示字段。
-            buildCardBaseAttr(esCardPO, attribute, links, categories);
-            buildEzaInfo(esCardPO, ezaCardPOS);
-            buildSuperInfo(esCardPO, specialPOS, attribute);
-            buildSkillInfo(esCardPO, skillPOS, attribute);
-            buildAttributeInfo(esCardPO, card);
-        });
-        return esCards;
-    }
-
-    /**
-     * 构建 ES 扩展属性。
-     *
-     * @param esCardPO ES 卡片文档
-     * @param card     MySQL 卡片数据
-     */
-    private void buildAttributeInfo(CardEsPO esCardPO, CardPO card) {
-        if (StringUtils.isBlank(card.getAttributes())) {
-            return;
-        }
-        Map<String, Object> attributes = new HashMap<>();
-        CardAttributeDTO cardAttributeDTO = JsonUtils.json2Object(card.getAttributes(), CardAttributeDTO.class);
-        if (Objects.isNull(cardAttributeDTO)) {
-            return;
-        }
-        attributes.put(EsCardAttributeKey.TRANSFORMATIONS, JsonUtils.object2Json(cardAttributeDTO.getNextCards()));
-        esCardPO.setAttributes(attributes);
-    }
-
-    /**
-     * 构建卡片技能信息。
-     *
-     * @param esCardPO ES 卡片文档
-     * @param skillPOS 技能持久化数据
-     * @param attribute 卡片扩展属性
-     */
-    private void buildSkillInfo(CardEsPO esCardPO, List<SkillPO> skillPOS, CardAttributeDTO attribute) {
-        if (CollectionUtils.isEmpty(skillPOS) || Objects.isNull(attribute)) {
-            log.error("skill数据查询失败");
-            return;
-        }
-        Map<String, SkillPO> skillPOMap = skillPOS.stream()
-                .collect(Collectors.toMap(SkillPO::getSkillId, Function.identity(), (oldValue, newValue) -> newValue));
-        if (!CollectionUtils.isEmpty(attribute.getStandBySkillIds())) {
-            List<SkillPO> standBySkills = Lists.newArrayList();
-            esCardPO.setStandBySkills(standBySkills);
-            attribute.getStandBySkillIds().forEach(skillId -> {
-                SkillPO skillPO = skillPOMap.get(skillId.toString());
-                if (Objects.nonNull(skillPO)) {
-                    standBySkills.add(skillPO);
-                }
-            });
-        }
-        if (!CollectionUtils.isEmpty(attribute.getFinishSkillIds())) {
-            List<SkillPO> finishSkills = Lists.newArrayList();
-            esCardPO.setFinishSkills(finishSkills);
-            attribute.getFinishSkillIds().forEach(finishSkillId -> {
-                SkillPO skillPO = skillPOMap.get(finishSkillId.toString());
-                if (Objects.nonNull(skillPO)) {
-                    finishSkills.add(skillPO);
-                }
-            });
-        }
-    }
-
-    /**
-     * 构建卡片必杀信息。
-     *
-     * @param esCardPO  ES 卡片文档
-     * @param specialPOS 必杀持久化数据
-     * @param attribute  卡片扩展属性
-     */
-    private void buildSuperInfo(CardEsPO esCardPO, List<SpecialPO> specialPOS, CardAttributeDTO attribute) {
-        if (CollectionUtils.isEmpty(specialPOS) || Objects.isNull(attribute)) {
-            log.error("cardId:{} 没有必杀信息", esCardPO.getCardId());
-            return;
-        }
-        Map<Long, SpecialPO> specialMap = specialPOS.stream()
-                .collect(Collectors.toMap(SpecialPO::getSpecialId, Function.identity(), (oldValue, newValue) -> newValue));
-        if (!CollectionUtils.isEmpty(attribute.getSpecialSkillIds())) {
-            List<SpecialPO> specialSkills = Lists.newArrayList();
-            esCardPO.setSpecialSkills(specialSkills);
-            attribute.getSpecialSkillIds().forEach(specialId -> {
-                SpecialPO specialPO = specialMap.get(specialId);
-                if (Objects.nonNull(specialPO)) {
-                    specialSkills.add(specialPO);
-                }
-            });
-        }
-    }
-
-    /**
-     * 构建卡片极限信息。
-     *
-     * @param esCardPO ES 卡片文档
-     * @param ezaCardPOS 极限持久化数据
-     */
-    private void buildEzaInfo(CardEsPO esCardPO, List<EzaCardPO> ezaCardPOS) {
-        if (CollectionUtils.isEmpty(ezaCardPOS)) {
-            esCardPO.setEzaFlag(false);
-            esCardPO.setSuperEzaFlag(false);
-            return;
-        }
-        List<EzaCardPO> currentEzaCards = ezaCardPOS.stream()
-                .filter(ezaCardPO -> esCardPO.getCardId().equals(ezaCardPO.getCardId()))
-                .sorted(Comparator.comparing(EzaCardPO::getStep))
-                .toList();
-        if (CollectionUtils.isEmpty(currentEzaCards)) {
-            esCardPO.setEzaFlag(false);
-            esCardPO.setSuperEzaFlag(false);
-            return;
-        }
-        esCardPO.setEzaFlag(true);
-        esCardPO.setSuperEzaFlag(hasSuperEza(currentEzaCards));
-        currentEzaCards.stream()
-                .min(Comparator.comparing(EzaCardPO::getStep))
-                .ifPresent(ezaCardPO -> {
-                    esCardPO.setEzaPublishTime(ezaCardPO.getPublishTime());
-                    esCardPO.setEzaLeaderSkill(ezaCardPO.getLeaderSkill());
-                    esCardPO.setEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
-                });
-        currentEzaCards.stream()
-                .max(Comparator.comparing(EzaCardPO::getStep))
-                .ifPresent(ezaCardPO -> {
-                    esCardPO.setEzaHpValue(ezaCardPO.getHpValue());
-                    esCardPO.setEzaDefValue(ezaCardPO.getDefValue());
-                    esCardPO.setEzaAtkValue(ezaCardPO.getAtkValue());
-                    if (Boolean.TRUE.equals(esCardPO.getSuperEzaFlag())) {
-                        esCardPO.setSuperEzaPublishTime(ezaCardPO.getPublishTime());
-                        esCardPO.setSuperEzaPassiveSkill(ezaCardPO.getPassiveSkillDesc());
-                    }
-                });
-        Date latestEzaPublishTime = currentEzaCards.stream()
-                .map(EzaCardPO::getPublishTime)
-                .filter(Objects::nonNull)
-                .max(Date::compareTo)
-                .orElse(null);
-        Date orderByTime = Objects.nonNull(latestEzaPublishTime)
-                ? latestEzaPublishTime : DateUtils.latestDate(esCardPO.getPublishTime(), esCardPO.getEzaPublishTime(),
-                esCardPO.getSuperEzaPublishTime());
-        if (Objects.nonNull(orderByTime)) {
-            esCardPO.setOrderByTime(orderByTime);
-        }
-    }
-
-    /**
-     * 判断卡片是否存在超极限阶段。
-     *
-     * @param currentEzaCards 当前卡片 EZA 持久化数据
-     * @return 是否存在超极限阶段
-     */
-    private boolean hasSuperEza(List<EzaCardPO> currentEzaCards) {
-        return currentEzaCards.size() > CardSyncConstants.SUPER_EZA_COUNT_THRESHOLD
-                || currentEzaCards.stream()
-                .map(EzaCardPO::getStep)
-                .filter(Objects::nonNull)
-                .anyMatch(step -> step >= TranslationConstants.EZA_PRE_STEP_THRESHOLD);
-    }
-
-    /**
-     * 构建卡片基础扩展属性。
-     *
-     * @param esCardPO  ES 卡片文档
-     * @param attributes 卡片扩展属性
-     * @param links      链接持久化数据
-     * @param categories 分类持久化数据
-     */
-    private void buildCardBaseAttr(CardEsPO esCardPO, CardAttributeDTO attributes,
-                                   List<DokkanLinkPO> links, List<DokkanCategoryPO> categories) {
-        if (Objects.isNull(attributes)) {
-            return;
-        }
-        esCardPO.setLeaderSkill(attributes.getLeaderSkill());
-        esCardPO.setPassiveSkill(attributes.getPassiveSkillDesc());
-        esCardPO.setActiveSkill(attributes.getActiveSkillEffect());
-        esCardPO.setFreeCardFlag(attributes.getFreeCardFlag());
-        esCardPO.setDokkanFesFlag(attributes.getDokkanFesFlag());
-        esCardPO.setCarnivalFlag(attributes.getCarnivalFlag());
-        esCardPO.setCategories(buildCategoryNames(categories, attributes.getCategoryId()));
-        esCardPO.setLinks(buildLinkName(links, attributes.getLinkId()));
-        esCardPO.setPotentials(dokkanEsSyncConvert.convert2PotentialDTO(attributes.getPotential()));
-        if (!CollectionUtils.isEmpty(attributes.getNextCards())) {
-            attributes.getNextCards().stream()
-                    .filter(nextCard -> esCardPO.getCardId().equals(nextCard.getStartCardId()))
-                    .findAny()
-                    .ifPresent(nextCard -> esCardPO.setNextCardId(nextCard.getNextCardId()));
-        }
-    }
-
-    /**
-     * 构建链接名称展示文本。
-     *
-     * @param links  链接持久化数据
-     * @param linkId 链接 ID 列表
-     * @return 链接名称展示文本
-     */
-    private String buildLinkName(List<DokkanLinkPO> links, List<Long> linkId) {
-        if (CollectionUtils.isEmpty(links) || CollectionUtils.isEmpty(linkId)) {
-            return null;
-        }
-        List<String> linkNames = new ArrayList<>();
-        for (Long id : linkId) {
-            DokkanLinkPO link = links.stream()
-                    .filter(l -> l.getLinkId().equals(id))
-                    .findFirst()
-                    .orElse(null);
-            if (Objects.nonNull(link)) {
-                linkNames.add(link.getLinkName());
-            }
-        }
-        return String.join(CardSyncConstants.DISPLAY_NAME_SEPARATOR, linkNames);
-    }
-
-    /**
-     * 构建分类名称展示文本。
-     *
-     * @param categories 分类持久化数据
-     * @param categoryId 分类 ID 列表
-     * @return 分类名称展示文本
-     */
-    private String buildCategoryNames(List<DokkanCategoryPO> categories, List<Long> categoryId) {
-        if (CollectionUtils.isEmpty(categories) || CollectionUtils.isEmpty(categoryId)) {
-            return null;
-        }
-        List<String> categoryNames = new ArrayList<>();
-        for (Long id : categoryId) {
-            DokkanCategoryPO category = categories.stream()
-                    .filter(c -> c.getCategoryId().equals(id))
-                    .findFirst()
-                    .orElse(null);
-            if (Objects.nonNull(category)) {
-                categoryNames.add(category.getCategoryName());
-            }
-        }
-        return String.join(CardSyncConstants.DISPLAY_NAME_SEPARATOR, categoryNames);
-    }
-
-    /**
-     * 从同步数据 Map 中读取指定类型列表，集中收敛泛型转换告警。
-     *
-     * @param dataMap 同步数据 Map
-     * @param key     数据 key
-     * @param <T>     目标元素类型
-     * @return 指定类型列表，未提供时返回空列表
-     */
-    @SuppressWarnings("unchecked")
-    private <T> List<T> typedList(Map<String, List<?>> dataMap, String key) {
-        if (Objects.isNull(dataMap) || CollectionUtils.isEmpty(dataMap.get(key))) {
+     * 按本批卡片读取状态、技能、关系和字典并组装完整 ES 文档。
+     **/
+    public List<CardEsPO> buildEsCards(List<CardPO> cards) {
+        if (cards == null || cards.isEmpty()) {
             return List.of();
         }
-        return (List<T>) dataMap.get(key);
+        List<Long> ids = cards.stream().map(CardPO::getCardId).toList();
+        Map<Long, List<CardStatePO>> states = stateRepository.queryByCardIds(ids).stream().collect(Collectors.groupingBy(CardStatePO::getCardId));
+        Map<Long, List<CardSkillPO>> skills = skillRepository.queryByCardIds(ids).stream().collect(Collectors.groupingBy(CardSkillPO::getCardId));
+        List<CardCategoryRelPO> categoryRelations = categoryRelRepository.queryByCardIds(ids);
+        List<CardLinkRelPO> linkRelations = linkRelRepository.queryByCardIds(ids);
+        Map<Long, String> categoryNames = categoryRepository.list().stream().collect(Collectors.toMap(DokkanCategoryPO::getCategoryId,
+                row -> Objects.toString(row.getCategoryName(), CardSyncConstants.EMPTY_TEXT), (left, right) -> left));
+        Map<Long, String> linkNames = linkRepository.list().stream().collect(Collectors.toMap(DokkanLinkPO::getLinkId,
+                row -> Objects.toString(row.getLinkName(), CardSyncConstants.EMPTY_TEXT), (left, right) -> left));
+        Map<Long, List<CardPO>> forms = cardRepository.lambdaQuery().in(CardPO::getBaseCardId, ids).list().stream()
+                .collect(Collectors.groupingBy(CardPO::getBaseCardId));
+        Map<Long, List<CardCategoryRelPO>> categoryByCard = categoryRelations.stream().collect(Collectors.groupingBy(CardCategoryRelPO::getCardId));
+        Map<Long, List<CardLinkRelPO>> linkByCard = linkRelations.stream().collect(Collectors.groupingBy(CardLinkRelPO::getCardId));
+        List<CardEsPO> documents = new ArrayList<>();
+        for (CardPO card : cards) {
+            CardEsPO document = convert.cardToEs(card);
+            document.setCardIcon(cardIconStorageService.saveCardIcon(card.getCardId(), card.getThumbnail()));
+            document.setPotentials(convert.potentials(card.getPotential()));
+            applyStates(document, states.getOrDefault(card.getCardId(), List.of()));
+            applySkills(document, skills.getOrDefault(card.getCardId(), List.of()));
+            document.setCategories(categoryByCard.getOrDefault(card.getCardId(), List.of()).stream()
+                    .map(CardCategoryRelPO::getCategoryId).map(categoryNames::get).filter(Objects::nonNull)
+                    .collect(Collectors.joining(CardSyncConstants.DISPLAY_NAME_SEPARATOR)));
+            document.setLinks(linkByCard.getOrDefault(card.getCardId(), List.of()).stream()
+                    .sorted(Comparator.comparing(CardLinkRelPO::getSort)).map(CardLinkRelPO::getLinkId).map(linkNames::get)
+                    .filter(Objects::nonNull).collect(Collectors.joining(CardSyncConstants.DISPLAY_NAME_SEPARATOR)));
+            applyForms(document, forms.getOrDefault(card.getCardId(), List.of()));
+            documents.add(document);
+        }
+        return documents;
+    }
+
+    /**
+     * base 取基础技能和数值；eza 取极限技能；seza 优先提供极限数值及独立被动。
+     **/
+    private void applyStates(CardEsPO document, List<CardStatePO> states) {
+        Map<String, CardStatePO> byKey = states.stream().collect(Collectors.toMap(CardStatePO::getStateKey, Function.identity()));
+        CardStatePO base = byKey.get(CardStateEnum.BASE.getKey());
+        if (base == null) {
+            throw new IllegalStateException(CardSyncConstants.MISSING_BASE_STATE_MESSAGE + document.getCardId());
+        }
+        document.setHpValue(base.getHpValue());
+        document.setAtkValue(base.getAtkValue());
+        document.setDefValue(base.getDefValue());
+        document.setLeaderSkill(base.getLeaderSkillDesc());
+        document.setPassiveSkill(base.getPassiveSkillDesc());
+        CardStatePO eza = byKey.get(CardStateEnum.EZA.getKey());
+        CardStatePO seza = byKey.get(CardStateEnum.SEZA.getKey());
+        if (eza != null) {
+            document.setEzaLeaderSkill(eza.getLeaderSkillDesc());
+            document.setEzaPassiveSkill(eza.getPassiveSkillDesc());
+            document.setEzaPublishTime(eza.getPublishTime());
+        }
+        CardStatePO highest = seza == null ? eza : seza;
+        if (highest != null) {
+            document.setEzaHpValue(highest.getHpValue());
+            document.setEzaAtkValue(highest.getAtkValue());
+            document.setEzaDefValue(highest.getDefValue());
+        }
+        if (seza != null) {
+            document.setSuperEzaPassiveSkill(seza.getPassiveSkillDesc());
+            document.setSuperEzaPublishTime(seza.getPublishTime());
+        }
+        document.setOrderByTime(DateUtils.latestDate(document.getPublishTime(), document.getEzaPublishTime(), document.getSuperEzaPublishTime()));
+    }
+
+    /**
+     * 技能按状态、展示顺序排列；super 保留 base/eza，其他技能按原类型展示。
+     **/
+    private void applySkills(CardEsPO document, List<CardSkillPO> skills) {
+        List<CardSkillPO> sorted = skills.stream().sorted(Comparator.comparingInt((CardSkillPO row) ->
+                stateOrder(row.getStateKey())).thenComparing(CardSkillPO::getSort)).toList();
+        document.setSpecialSkills(sorted.stream().filter(row -> CardSkillTypeEnum.SUPER.getType().equals(row.getSkillType()))
+                .filter(row -> !CardStateEnum.SEZA.getKey().equals(row.getStateKey())).map(convert::skillToSpecial).toList());
+        document.setStandBySkills(sorted.stream().filter(row -> CardSkillTypeEnum.STANDBY.getType().equals(row.getSkillType()))
+                .map(convert::skillToEsSkill).toList());
+        document.setFinishSkills(sorted.stream().filter(row -> CardSkillTypeEnum.FINISH.getType().equals(row.getSkillType()))
+                .map(convert::skillToEsSkill).toList());
+        sorted.stream().filter(row -> CardSkillTypeEnum.ACTIVE.getType().equals(row.getSkillType()))
+                .findFirst().ifPresent(row -> document.setActiveSkill(row.getEffectDesc()));
+    }
+
+    /**
+     * 状态顺序复用枚举顺序，未知状态放在末尾。
+     **/
+    private int stateOrder(String key) {
+        return Arrays.stream(CardStateEnum.values()).filter(state -> state.getKey().equals(key))
+                .findFirst().map(Enum::ordinal).orElse(Integer.MAX_VALUE);
+    }
+
+    /**
+     * 由 base_card_id 关系生成旧前端使用的 transformations JSON。
+     **/
+    private void applyForms(CardEsPO document, List<CardPO> forms) {
+        List<Map<String, Object>> transformations = new ArrayList<>();
+        for (CardPO form : forms.stream().sorted(Comparator.comparing(CardPO::getCardId)).toList()) {
+            Map<String, Object> next = new LinkedHashMap<>();
+            next.put(CardSyncConstants.TRANSFORM_ID_FIELD, form.getCardId());
+            next.put(CardSyncConstants.TRANSFORM_NAME_FIELD, form.getCardName());
+            next.put(CardSyncConstants.TRANSFORM_TYPE_FIELD, CardTransformationTypeEnum.fromKxFormKind(form.getFormKind()));
+            next.put(CardSyncConstants.TRANSFORM_CONDITION_FIELD, form.getFormTrigger());
+            Map<String, Object> relation = new LinkedHashMap<>();
+            relation.put(CardSyncConstants.TRANSFORM_START_CARD_ID_FIELD, document.getCardId());
+            relation.put(CardSyncConstants.TRANSFORM_NEXT_CARD_ID_FIELD, form.getCardId());
+            relation.put(CardSyncConstants.TRANSFORM_NEXT_CARD_FIELD, next);
+            transformations.add(relation);
+        }
+        document.setNextCardId(forms.isEmpty() ? null : forms.stream().map(CardPO::getCardId).min(Long::compareTo).orElse(null));
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put(EsCardAttributeKey.TRANSFORMATIONS, JsonUtils.object2Json(transformations));
+        document.setAttributes(attributes);
     }
 }

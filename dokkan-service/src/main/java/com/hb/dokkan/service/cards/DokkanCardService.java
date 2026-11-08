@@ -3,6 +3,7 @@ package com.hb.dokkan.service.cards;
 import cn.hutool.core.util.NumberUtil;
 import com.google.common.collect.Lists;
 import com.hb.dokkan.common.domain.dto.cards.CardQueryConditionDTO;
+import com.hb.dokkan.common.domain.request.cards.CardTagBatchRequest;
 import com.hb.dokkan.common.domain.dto.cards.CardQueryOptionDTO;
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
 import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
@@ -34,18 +35,33 @@ import java.util.Optional;
 @Service
 public class DokkanCardService{
 
+    /**
+     * 卡片 ES 查询与文档写入仓储。
+     **/
     @Resource
     private DokkanEsCardRepository dokkanEsCardRepository;
 
+    /**
+     * 分类字典访问仓储。
+     **/
     @Resource
     private DokkanCategoryRepository categoryRepository;
 
+    /**
+     * 链接技能字典访问仓储。
+     **/
     @Resource
     private DokkanLinkRepository linkRepository;
 
+    /**
+     * 卡片查询参数及展示视图转换器。
+     **/
     @Resource
     private DokkanCardConvert cardConvert;
 
+    /**
+     * KX Wiki 与 MySQL、ES 的同步编排服务。
+     **/
     @Resource
     private SyncDataService syncDataService;
 
@@ -53,7 +69,7 @@ public class DokkanCardService{
     /**
      * 查询卡片列表
      *
-     */
+     **/
     public PageResponse<CardListVO> cardList(CardQueryOptionDTO queryOption) {
         List<String> categories = Lists.newArrayList();
         List<String> links = Lists.newArrayList();
@@ -84,6 +100,9 @@ public class DokkanCardService{
                 .build();
     }
 
+    /**
+     * 合并分类/链接名称及稀有度，保留新标签精确筛选条件。
+     **/
     private CardQueryConditionDTO buildCondition(CardQueryOptionDTO queryOption, List<String> categories, List<String> links) {
         CardQueryConditionDTO cardQueryConditionDTO = cardConvert.convertToEsQueryCondition(queryOption);
         if (StringUtils.isNotBlank(cardQueryConditionDTO.getPropType())) {
@@ -98,31 +117,8 @@ public class DokkanCardService{
     }
 
     /**
-     * 重新翻译单张卡片，并返回最新卡片详情。
-     *
-     * @param cardId 卡片 ID
-     * @return 最新卡片详情
-     */
-    public CardDetailVO retranslateCard(Long cardId) {
-        syncDataService.retranslateCardById(cardId);
-        CardQueryOptionDTO queryOption = new CardQueryOptionDTO();
-        queryOption.setCardId(cardId);
-        return cardDetail(queryOption);
-    }
-
-    /**
-     * 批量重新翻译卡片。
-     *
-     * @param cardIds 卡片 ID 列表
-     * @return 成功重新翻译数量
-     */
-    public int retranslateCards(List<Long> cardIds) {
-        return syncDataService.retranslateCardsByIds(cardIds);
-    }
-
-    /**
      * 查询卡片详情
-     */
+     **/
     public CardDetailVO cardDetail(CardQueryOptionDTO queryOption) {
         CardQueryConditionDTO cardQueryConditionDTO = cardConvert.convertToEsQueryCondition(queryOption);
         if (Objects.isNull(cardQueryConditionDTO)) {
@@ -134,5 +130,11 @@ public class DokkanCardService{
         }
         CardEsPO cardEsPO = optional.get();
         return cardConvert.convertToCardDetailVO(cardEsPO);
+    }
+    /**
+     * 执行人工批量标签更新，提交 MySQL 后刷新对应 ES。
+     **/
+    public int batchUpdateTags(CardTagBatchRequest request) {
+        return syncDataService.batchUpdateTags(request);
     }
 }

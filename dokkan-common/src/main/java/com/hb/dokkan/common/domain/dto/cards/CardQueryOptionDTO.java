@@ -18,70 +18,87 @@ import java.util.Objects;
 public class CardQueryOptionDTO implements Serializable {
     /**
      * 页码
-     */
+     **/
     private Integer pageNum;
 
     /**
      * 每页数量
-     */
+     **/
     private Integer pageSize;
     /**
      * 卡片名称
-     */
+     **/
     private String cardName;
     /**
      * 卡片id
-     */
+     **/
     private Long cardId;
     /**
      * 属性名称
      * @see CardPropTypeEnum
-     */
+     **/
     private String propType;
     /**
      * 超系或极系
      * @see CardPropTypeEnum
-     */
+     **/
     private String type;
 
     /**
      * 稀有度
      * @see CardRarityEnum
-     */
+     **/
     private String rarity;
+
+    /**
+     * cost 精确筛选条件。
+     **/
+    private Integer cost;
+    /**
+     * 祭限定标记精确筛选条件。
+     **/
+    private Boolean dokkanFesFlag;
+    /**
+     * 嘉年华标记精确筛选条件。
+     **/
+    private Boolean carnivalFlag;
+    /**
+     * 免费卡标记精确筛选条件。
+     **/
+    private Boolean freeCardFlag;
 
 
     /**
      * 链接id列表
-     */
+     **/
     private List<Integer> linkIds;
 
     /**
      * 分类id列表
-     */
+     **/
     private List<Integer> categoryIds;
 
     /**
      * 链接匹配类型 0: and 1: or
-     */
+     **/
     private String linkMatchType;
 
 
     /**
      * 分类匹配类型 0: and 1: or
-     */
+     **/
     private String categoryMatchType;
 
     /**
      * 排序字段
      * key: 排序字段名
      * value: true: 升序, false: 降序
-     */
+     **/
     private Map<String, Boolean> orderBy;
 
     /**
      * 初始化分页参数
-     */
+     **/
     public void initPageable() {
         if (Objects.nonNull(pageNum) && Objects.nonNull(pageSize)) {
             return;

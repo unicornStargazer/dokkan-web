@@ -1,253 +1,184 @@
 package com.hb.dokkan.service.job.sync.strategy.strategies;
 
-import com.google.common.collect.Lists;
-import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
-import com.hb.dokkan.common.domain.dto.data.dokkandb.DokkanDbCardDTO;
-import com.hb.dokkan.service.facade.DokkanDbFacade.CardSourceData;
-import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardDTO;
+import com.hb.dokkan.common.constants.CardSyncConstants;
+import com.hb.dokkan.common.constants.ExceptionErrorCode;
+import com.hb.dokkan.common.domain.bo.data.KxWikiCardBO;
+import com.hb.dokkan.common.domain.dto.data.kx.*;
 import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.EzaCardPO;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.config.data.WikiCardFilter;
-import com.hb.dokkan.config.http.HttpPoolProperties;
-import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
-import com.hb.dokkan.service.facade.DokkanDbFacade;
-import com.hb.dokkan.service.helper.WikiCardHelper;
 import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanEzaCardRepository;
+import com.hb.dokkan.service.client.KxWikiClient;
+import com.hb.dokkan.service.convert.KxWikiCardConvert;
 import com.hb.dokkan.service.job.sync.SyncProgressContext;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.util.CollectionUtils;
-
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Semaphore;
 
 /**
- * @Description 卡片wiki
- * @Author stargazer
- * @Date 2025/9/10 22:06
+ * @Description KX Wiki 卡片候选扫描和逐卡抓取策略
+ * @Author Codex
+ * @Date 2026/11/8
  **/
-@Slf4j
 @Component
+@Slf4j
 public class WikiCardStrategy implements WikiInfoStrategy {
-
+    /**
+     * KX Wiki 数据访问客户端。
+     **/
     @Resource
-    private DokkanDbFacade dokkanDbFacade;
-
+    private KxWikiClient client;
+    /**
+     * KX Wiki 响应到卡片事务聚合的转换器。
+     **/
+    @Resource
+    private KxWikiCardConvert convert;
+    /**
+     * 卡片主表访问仓储。
+     **/
     @Resource
     private DokkanCardRepository cardRepository;
-
-    @Resource
-    private DokkanEzaCardRepository ezaCardRepository;
-
-    @Resource
-    private HttpPoolProperties httpPoolProperties;
-
-    @Resource
-    private DokkanThreadPoolExecutor dokkanThreadPoolExecutor;
-
-    private Semaphore semaphore;
-
-    @Resource
-    private WikiCardHelper wikiCardHelper;
-
+    /**
+     * 自动同步的卡片黑白名单配置。
+     **/
     @Resource
     private WikiCardFilter cardFilter;
-
+    /**
+     * 只有 MySQL 和 ES 全部成功后才确认源水位。
+     **/
+    private volatile String lastUpdatedAt;
+    /**
+     * ES 或持久化失败的根卡，即使 flags 相同也必须在下一轮重试。
+     **/
+    private final Set<Long> pendingCardIds = ConcurrentHashMap.newKeySet();
 
     /**
-     * 是否匹配
-     */
+     * 匹配卡片同步策略。
+     **/
     @Override
     public boolean isMatched(WikiInfoTypeEnum type) {
         return WikiInfoTypeEnum.CARD.equals(type);
     }
 
+    /**
+     * status 无变化时短路；分页失败抛错；详情失败隔离并记录卡片 ID。
+     **/
     @Override
     public void execute(WikiContext context) {
-        List<WikiCardDTO> wikiCards = this.getWikiCards();
-        WikiCardBO cardBO = new WikiCardBO();
-        context.setWikiCards(wikiCards);
-        context.setCardData(cardBO);
-        wikiCardHelper.buildData(cardBO, context.getWikiCards());
-    }
-
-    private List<WikiCardDTO> getWikiCards() {
-        try {
-            List<DokkanDbCardDTO> catalog = dokkanDbFacade.getRecentCatalog(500);
-            if (CollectionUtils.isEmpty(catalog)) {
-                throw new DokkanBizException("DokkanDB catalog is empty");
+        String updatedAt = client.getStatus().map(KxWikiStatusDTO::getUpdatedAt)
+                .filter(value -> !value.isBlank()).orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        if (Objects.equals(updatedAt, lastUpdatedAt) && pendingCardIds.isEmpty()) {
+            return;
+        }
+        context.setSourceUpdatedAt(updatedAt);
+        List<KxWikiCardListItemDTO> catalog = readCatalog();
+        Map<Long, CardPO> existing = cardRepository.listSyncFlags().stream()
+                .collect(Collectors.toMap(CardPO::getCardId, Function.identity()));
+        List<Long> candidates = catalog.stream().filter(item -> isCandidate(item, existing.get(item.getId())))
+                .map(KxWikiCardListItemDTO::getId).distinct().toList();
+        for (int index = 0; index < candidates.size(); index++) {
+            Long cardId = candidates.get(index);
+            pendingCardIds.add(cardId);
+            try {
+                context.getCardData().add(fetchCard(cardId, false));
+            } catch (RuntimeException exception) {
+                context.getFailedCardIds().add(cardId);
+                log.error("KX Wiki card failed, cardId={}", cardId, exception);
             }
-            List<DokkanDbCardDTO> filteredCatalog = catalog.stream()
-                    .filter(card -> card.getId() != null && card.getId() < 5000021)
-                    .filter(card -> card.getRarity() != null && card.getRarity() > 3)
-                    .filter(card -> !cardFilter.getWikiCardBlackList().contains(card.getId()))
-                    .toList();
-            Map<Long, CardPO> existingCards = cardRepository.batchQueryByCardIds(
-                            filteredCatalog.stream().map(DokkanDbCardDTO::getId).toList())
-                    .stream().collect(Collectors.toMap(CardPO::getCardId, Function.identity(), (left, right) -> left));
-            Map<Long, List<EzaCardPO>> existingEzaCards = ezaCardRepository.batchQueryByCardIds(
-                            filteredCatalog.stream().map(DokkanDbCardDTO::getId).toList())
-                    .stream().collect(Collectors.groupingBy(EzaCardPO::getCardId));
-            // 变身卡需要独立拉取，才能同时发现变身卡新增的极限阶段。
-            List<Long> transformationIds = collectTransformationCardIds(filteredCatalog);
-            Set<Long> candidateCardIds = filteredCatalog.stream()
-                    .filter(card -> isNewOrUpdated(card, existingCards.get(card.getId()), existingEzaCards.get(card.getId())))
-                    .map(DokkanDbCardDTO::getId)
-                    .collect(Collectors.toCollection(LinkedHashSet::new));
-            candidateCardIds.addAll(transformationIds);
-            List<Long> cardIds = new ArrayList<>(candidateCardIds);
-            SyncProgressContext.update(12, "抓取外部数据", "发现 " + cardIds.size() + " 个候选 cardId");
-            log.info("DokkanDB incremental catalog checked, catalogSize:{}, syncCandidates:{}",
-                    filteredCatalog.size(), cardIds.size());
-            if (cardIds.isEmpty()) return Lists.newArrayList();
+            SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_EXTERNAL_START
+                            + (index + 1) * CardSyncConstants.SYNC_PROGRESS_EXTERNAL_SPAN / Math.max(candidates.size(), 1),
+                    CardSyncConstants.STAGE_FETCH_EXTERNAL,
+                    CardSyncConstants.MESSAGE_KX_FETCH_PROGRESS + (index + 1) + CardSyncConstants.PATH_SEPARATOR + candidates.size());
+        }
+    }
 
-            HttpPoolProperties.Concurrency concurrencyConfig = httpPoolProperties.getConcurrency();
-            int batchSize = Math.min(concurrencyConfig.getBatchSize(), 50);
-            List<WikiCardDTO> allResult = Lists.newArrayList();
-            List<Long> errorIds = new CopyOnWriteArrayList<>();
-            for (int i = 0; i < cardIds.size(); i+= batchSize) {
-                int endIndex = Math.min(i + batchSize, cardIds.size());
+    /**
+     * 获取一张本体卡和全部形态；手动同步强制读取 extras。
+     **/
+    public KxWikiCardBO fetchCard(Long cardId, boolean manual) {
+        KxWikiCardDetailDTO detail = client.getCardDetail(cardId)
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        if (!Objects.equals(cardId, detail.getId())) {
+            throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
+        }
+        KxWikiEnrichmentDTO enrichment = client.getEnrichment(cardId)
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        boolean hasEza = detail.getStates() != null && detail.getStates().stream()
+                .anyMatch(state -> !CardSyncConstants.CARD_STATE_BASE.equals(state.getKey()));
+        KxWikiExtrasDTO extras = manual || hasEza ? client.getExtras(cardId)
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR)) : null;
+        return convert.toAggregate(detail, enrichment, extras);
+    }
 
-                List<Long> batchCardIds = cardIds.subList(i, endIndex);
+    /**
+     * 确认已完成的根卡，确保 ES 失败时可重放整个聚合。
+     **/
+    public void markCardComplete(Long cardId) {
+        pendingCardIds.remove(cardId);
+    }
 
-                log.info("处理器:{} 批, 数量:{}", (i / batchSize + 1), batchCardIds.size());
+    /**
+     * 仅成功轮次确认源版本；失败卡仍在 pending 中，后续不会 status 短路。
+     **/
+    public void markVersionComplete(String updatedAt) {
+        if (pendingCardIds.isEmpty() && updatedAt != null) {
+            lastUpdatedAt = updatedAt;
+        }
+    }
 
-                    List<CompletableFuture<CardSourceData>> completableFutures = batchCardIds.stream()
-                        // CompletableFuture进行并行编排指定自定义的线程池
-                        .map(cardId -> CompletableFuture
-                                .supplyAsync(() -> {
-                                    boolean acquired = false;
-                                    try{
-                                        semaphore.acquire();
-                                        acquired = true;
-                                        return dokkanDbFacade.fetchCardSource(cardId);
-                                    }catch (Exception e) {
-                                        log.error("获取卡片异常 cardId:{}", cardId, e);
-                                        errorIds.add(cardId);
-                                        return null;
-                                    }finally {
-                                        if (acquired) {
-                                            semaphore.release();
-                                        }
-                                    }
-                                }, dokkanThreadPoolExecutor))
-                        .toList();
-                List<CardSourceData> fetchedCards = CompletableFuture.allOf(completableFutures.toArray(new CompletableFuture[0]))
-                        .thenApply(v -> completableFutures.stream()
-                                .map(CompletableFuture::join)
-                                .filter(Objects::nonNull)
-                                .toList())
-                        .join();
-                List<WikiCardDTO> batchResult = dokkanDbFacade.assembleCards(fetchedCards, false);
-                allResult.addAll(batchResult);
-                int processed = endIndex;
-                int percent = 12 + Math.round(processed * 48f / Math.max(cardIds.size(), 1));
-                SyncProgressContext.update(percent, "抓取外部数据",
-                        "已处理 " + processed + "/" + cardIds.size() + "，有效卡片 " + allResult.size());
-                log.info("第 {} 批处理完成 获取到{}个有效卡片", (i / batchSize + 1), batchCardIds.size());
-
+    /**
+     * 读取全部列表页，保留 UR/LR 和既有黑名单规则。
+     **/
+    private List<KxWikiCardListItemDTO> readCatalog() {
+        List<KxWikiCardListItemDTO> catalog = new ArrayList<>();
+        Set<Long> blacklist = new HashSet<>(cardFilter.getWikiCardBlackList());
+        for (int page = 1; page <= CardSyncConstants.KX_WIKI_MAX_PAGES; page++) {
+            KxWikiPageResponse<KxWikiCardListItemDTO> response = client.listCards(page);
+            response.getItems().stream().filter(item -> isIncludedInAutomaticSync(item, blacklist))
+                    .forEach(catalog::add);
+            if (page >= response.getPages()) {
+                return catalog;
             }
-            if (!errorIds.isEmpty()) log.error("DokkanDB card fetch failed, count:{}, cardIds:{}", errorIds.size(), errorIds);
-            log.info("DokkanDB incremental fetch completed, cards:{}", allResult.size());
-            return allResult;
+        }
+        throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
+    }
 
-
-        } catch (Exception e) {
-            log.error("WikiCardInfoStrategy#getWikiCards error",e);
-            return Lists.newArrayList();
+    /**
+     * 新卡、待重试、缺少 hash 或极限标记变化时需要抓取详情。
+     **/
+    private boolean isCandidate(KxWikiCardListItemDTO source, CardPO existing) {
+        if (existing == null) {
+            return true;
+        } else if (pendingCardIds.contains(source.getId())) {
+            return true;
+        } else if (existing.getSourceHash() == null) {
+            return true;
+        } else if (Boolean.TRUE.equals(source.getHasEza()) != Boolean.TRUE.equals(existing.getEzaFlag())) {
+            return true;
+        } else {
+            return Boolean.TRUE.equals(source.getHasSeza()) != Boolean.TRUE.equals(existing.getSezaFlag());
         }
     }
 
     /**
-     * 收集目录中所有变身后的卡片 ID，用于补齐本地缺失的变身卡详情。
-     *
-     * @param cards DokkanDB 卡片目录
-     * @return 去重后的变身卡 ID 列表
-     */
-    private List<Long> collectTransformationCardIds(List<DokkanDbCardDTO> cards) {
-        if (CollectionUtils.isEmpty(cards)) {
-            return List.of();
-        }
-        return cards.stream()
-                .flatMap(card -> safeTransformationIds(card).stream())
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-    }
-
-    /**
-     * 获取卡片变身后 ID 列表，空值返回空集合。
-     *
-     * @param card DokkanDB 目录卡片
-     * @return 变身后卡片 ID 列表
-     */
-    private List<Long> safeTransformationIds(DokkanDbCardDTO card) {
-        if (Objects.isNull(card) || CollectionUtils.isEmpty(card.getTransformationIds())) {
-            return List.of();
-        }
-        return card.getTransformationIds().stream()
-                .filter(Objects::nonNull)
-                .toList();
-    }
-
-    /**
-     * 判断目录卡片是否需要增量同步。
-     *
-     * @param source       DokkanDB 目录卡片
-     * @param existing     已有基础卡片
-     * @param existingEzas 已有极限卡片列表
-     * @return 是否需要同步
-     */
-    private boolean isNewOrUpdated(DokkanDbCardDTO source, CardPO existing, List<EzaCardPO> existingEzas) {
-        if (existing == null) return true;
-        return hasMissingEzaData(source, existingEzas);
-    }
-
-    /**
-     * 判断已有数据是否缺少当前目录暴露的极限阶段。
-     *
-     * @param source       DokkanDB 目录卡片
-     * @param existingEzas 已有极限卡片列表
-     * @return 是否缺少极限数据
-     */
-    private boolean hasMissingEzaData(DokkanDbCardDTO source, List<EzaCardPO> existingEzas) {
-        if (source.getStep() == null || source.getStep() <= 0) {
+     * 按 ID、稀有度和黑名单逐项筛选自动同步范围，保持原有短路顺序。
+     **/
+    private boolean isIncludedInAutomaticSync(KxWikiCardListItemDTO item, Set<Long> blacklist) {
+        if (item.getId() == null) {
             return false;
+        } else if (item.getRarity() == null) {
+            return false;
+        } else if (item.getRarity() < CardSyncConstants.LIMITED_RULE_UR_RARITY) {
+            return false;
+        } else {
+            return !blacklist.contains(item.getId());
         }
-        if (CollectionUtils.isEmpty(existingEzas)) {
-            return true;
-        }
-        List<Integer> existingSteps = existingEzas.stream()
-                .map(EzaCardPO::getStep)
-                .filter(Objects::nonNull)
-                .toList();
-        Integer maxExistingStep = existingSteps.stream().max(Integer::compareTo).orElse(null);
-        if (Objects.isNull(maxExistingStep) || source.getStep() > maxExistingStep
-                || !existingSteps.contains(source.getStep())) {
-            return true;
-        }
-        return false;
     }
-
-    @PostConstruct
-    public void preLoad() {
-        semaphore = new Semaphore(httpPoolProperties.getConcurrency().getSemaphorePermits());
-    }
-
 }

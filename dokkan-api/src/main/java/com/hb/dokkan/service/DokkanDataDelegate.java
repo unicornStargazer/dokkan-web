@@ -1,21 +1,13 @@
 package com.hb.dokkan.service;
 
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
-import com.hb.dokkan.common.constants.TranslationConstants;
 import com.hb.dokkan.common.domain.request.cards.CardIdSyncRequest;
 import com.hb.dokkan.common.domain.request.data.SyncStartRequest;
-import com.hb.dokkan.common.domain.request.data.TranslationRequest;
 import com.hb.dokkan.common.domain.response.base.DokkanResponse;
 import com.hb.dokkan.common.domain.response.data.SyncProgressResponse;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.service.job.sync.SyncDataService;
 import com.hb.dokkan.service.job.sync.SyncProgressService;
-import com.hb.dokkan.translation.BusinessTranslationService;
-import com.hb.dokkan.translation.domain.TranslationBatchRequest;
-import com.hb.dokkan.translation.domain.TranslationItem;
-import com.hb.dokkan.translation.domain.TranslationItemResult;
-import com.hb.dokkan.translation.domain.TranslationProviderType;
-import com.hb.dokkan.translation.domain.TranslationScene;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import com.hb.dokkan.common.utils.StringUtils;
@@ -30,18 +22,22 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class DokkanDataDelegate {
 
+    /**
+     * KX Wiki 与 MySQL、ES 的同步编排服务。
+     **/
     @Resource
     private SyncDataService syncDataService;
 
+    /**
+     * 同步任务进度管理服务。
+     **/
     @Resource
     private SyncProgressService syncProgressService;
 
-    @Resource
-    private BusinessTranslationService translationService;
 
     /**
      * 初始化卡片数据
-     */
+     **/
     public DokkanResponse initCard() {
         try {
             syncDataService.initCard();
@@ -57,7 +53,7 @@ public class DokkanDataDelegate {
 
     /**
      * 同步es卡片数据
-     */
+     **/
     public DokkanResponse syncEsCardData() {
         try {
             syncDataService.syncEsCardData();
@@ -71,8 +67,11 @@ public class DokkanDataDelegate {
         }
     }
 
+    /**
+     * 校验指定卡片同步入参并返回同步数量。
+     **/
     public DokkanResponse<Integer> syncCardByIds(CardIdSyncRequest request) {
-        if (request == null || request.getCardIds() == null || request.getCardIds().isEmpty()) {
+        if (!hasRequestedCardIds(request)) {
             return DokkanResponse.<Integer>builder().fail(
                     ExceptionErrorCode.QUERY_PARAM_ERROR.getErrorCode(),
                     ExceptionErrorCode.QUERY_PARAM_ERROR.getErrorMsg());
@@ -92,6 +91,9 @@ public class DokkanDataDelegate {
         }
     }
 
+    /**
+     * 启动异步同步任务并返回任务 ID。
+     **/
     public DokkanResponse<String> startSync(SyncStartRequest request) {
         try {
             return DokkanResponse.<String>builder().withModel(syncProgressService.start(request)).success();
@@ -106,6 +108,9 @@ public class DokkanDataDelegate {
         }
     }
 
+    /**
+     * 查询同步任务进度，任务不存在时返回参数错误。
+     **/
     public DokkanResponse<SyncProgressResponse> syncProgress(String jobId) {
         SyncProgressResponse progress = syncProgressService.get(jobId);
         if (progress == null) {
@@ -116,99 +121,21 @@ public class DokkanDataDelegate {
     }
 
     /**
-     * 使用普通翻译链路翻译文本。
-     *
-     * @param request 翻译请求
-     * @return 翻译响应
-     */
-    public DokkanResponse<String> translate(TranslationRequest request) {
-        // 参数校验失败时直接返回统一错误响应，不进入远程翻译链路。
-        if (!validTranslationRequest(request)) {
-            return translationParamError();
+     * 依次判空请求及卡片集合，避免空请求触发字段访问。
+     **/
+    private boolean hasRequestedCardIds(CardIdSyncRequest request) {
+        if (request == null) {
+            return false;
+        } else if (request.getCardIds() == null) {
+            return false;
+        } else {
+            return !request.getCardIds().isEmpty();
         }
-        try {
-            String translated = translateText(request.getText(), TranslationProviderType.GOOGLE);
-            if (translated == null) {
-                return DokkanResponse.<String>builder().fail();
-            }
-            return DokkanResponse.<String>builder().withModel(translated).success();
-        } catch (Exception e) {
-            log.error("DokkanDataDelegate#translate error", e);
-            return DokkanResponse.<String>builder().fail();
-        }
-    }
-
-    /**
-     * 使用 LLM 翻译链路翻译文本。
-     *
-     * @param request 翻译请求
-     * @return 翻译响应
-     */
-    public DokkanResponse<String> translateByLlm(TranslationRequest request) {
-        // 参数校验失败时直接返回统一错误响应，避免无效文本请求外部 LLM。
-        if (!validTranslationRequest(request)) {
-            return translationParamError();
-        }
-        try {
-            String translated = translateText(request.getText(), TranslationProviderType.LLM);
-            if (translated == null) {
-                return DokkanResponse.<String>builder().fail();
-            }
-            return DokkanResponse.<String>builder()
-                    .withModel(translated)
-                    .success();
-        } catch (IllegalStateException e) {
-            log.warn("DokkanDataDelegate#translateByLlm failed, error={}", e.getMessage());
-            return DokkanResponse.<String>builder()
-                    .fail(ExceptionErrorCode.QUERY_PARAM_ERROR.getErrorCode(), e.getMessage());
-        } catch (Exception e) {
-            log.error("DokkanDataDelegate#translateByLlm error", e);
-            return DokkanResponse.<String>builder().fail();
-        }
-    }
-
-    /**
-     * 通过统一翻译模块执行显式 provider 模式的单文本翻译。
-     *
-     * @param text         原文
-     * @param providerType 指定 provider
-     * @return 成功译文；校验或 provider 失败时返回 null
-     */
-    private String translateText(String text, TranslationProviderType providerType) {
-        TranslationItemResult result = translationService.translate(new TranslationBatchRequest(
-                        TranslationScene.GENERAL_TEXT, providerType,
-                        java.util.List.of(new TranslationItem("request", text)), false))
-                .stream().findFirst().orElse(null);
-        return result != null && result.status() == TranslationItemResult.Status.SUCCESS
-                ? result.translatedText() : null;
-    }
-
-    /**
-     * 校验翻译请求文本是否非空且不超过最大长度。
-     *
-     * @param request 翻译请求
-     * @return 校验是否通过
-     */
-    private boolean validTranslationRequest(TranslationRequest request) {
-        return request != null
-                && StringUtils.isNotBlank(request.getText())
-                && request.getText().length() <= TranslationConstants.MAX_TRANSLATION_TEXT_LENGTH;
-    }
-
-    /**
-     * 构建翻译参数错误响应。
-     *
-     * @return 翻译参数错误响应
-     */
-    private DokkanResponse<String> translationParamError() {
-        return DokkanResponse.<String>builder().fail(
-                ExceptionErrorCode.QUERY_PARAM_ERROR.getErrorCode(),
-                TranslationConstants.TRANSLATION_TEXT_ERROR_MESSAGE);
     }
 
     /**
      * 初始化分类数据
-     */
+     **/
     public DokkanResponse initCategories() {
         try {
             syncDataService.initCategories();
@@ -224,7 +151,7 @@ public class DokkanDataDelegate {
 
     /**
      * 初始化链接数据
-     */
+     **/
     public DokkanResponse initLinks() {
         try {
             syncDataService.initLinks();
@@ -238,19 +165,4 @@ public class DokkanDataDelegate {
         return DokkanResponse.builder().success();
     }
 
-    /**
-     * 修复数据库数据
-     */
-    public DokkanResponse fixDbData(Integer fixType) {
-        try {
-            syncDataService.fixDbData(fixType);
-        }catch (DokkanBizException e){
-            log.error("biz exception,error:{},e",e.getMessage(),e.getCause());
-            return DokkanResponse.builder().fail(e.getError().getErrorCode(), e.getError().getErrorMsg());
-        } catch (Exception e) {
-            log.error("DokkanDataServiceImpl#fixDbData error,",e);
-            return DokkanResponse.builder().fail();
-        }
-        return DokkanResponse.builder().success();
-    }
 }

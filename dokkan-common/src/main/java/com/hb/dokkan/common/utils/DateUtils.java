@@ -5,10 +5,8 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.Date;
@@ -27,24 +25,29 @@ public class DateUtils {
      *
      * @param value yyyy-MM-dd 日期
      * @return 本地日期
-     */
+     **/
     public static LocalDate parseIsoDate(String value) {
         return LocalDate.parse(value, DateTimeFormatter.ISO_LOCAL_DATE);
     }
 
-    /** 日期格式：年月日。 */
+    /**
+     * 日期格式：年月日。
+     **/
     private static final String DATE_PATTERN = "yyyy-MM-dd";
 
-    /** 日期时间格式：精确到秒。 */
+    /**
+     * 日期时间格式：精确到秒。
+     **/
     private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
-    /** DokkanDB 未携带时区的日期默认按东京时区解析。 */
-    private static final String DOKKAN_DB_DEFAULT_ZONE = "Asia/Tokyo";
-
-    /** 日期格式化器：年月日。 */
+    /**
+     * 日期格式化器：年月日。
+     **/
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat(DATE_PATTERN);
 
-    /** 日期时间格式化器：精确到秒。 */
+    /**
+     * 日期时间格式化器：精确到秒。
+     **/
     private static final SimpleDateFormat DATE_TIME_FORMAT = new SimpleDateFormat(DATE_TIME_PATTERN);
 
     /**
@@ -52,7 +55,7 @@ public class DateUtils {
      *
      * @param day 日期对象
      * @return 年月日字符串，入参为空时返回 null
-     */
+     **/
     public static String date2Day(Date day) {
         if (ObjectUtils.isEmpty(day)) {
             return null;
@@ -65,7 +68,7 @@ public class DateUtils {
      *
      * @param time 日期对象
      * @return 日期时间字符串，入参为空时返回 null
-     */
+     **/
     public static String date2Second(Date time) {
         if (ObjectUtils.isEmpty(time)) {
             return null;
@@ -78,7 +81,7 @@ public class DateUtils {
      *
      * @param dateStr 年月日字符串
      * @return 日期对象，入参为空或解析失败时返回 null
-     */
+     **/
     public static Date day2Date(String dateStr) {
         if (ObjectUtils.isEmpty(dateStr)) {
             return null;
@@ -95,7 +98,7 @@ public class DateUtils {
      *
      * @param dates 日期数组
      * @return 最新日期，不存在有效日期时返回 null
-     */
+     **/
     public static Date latestDate(Date... dates) {
         if (ObjectUtils.isEmpty(dates)) {
             return null;
@@ -107,34 +110,34 @@ public class DateUtils {
     }
 
     /**
-     * 解析 DokkanDB 日期字符串，优先支持带时区时间，未带时区时按东京时区兜底。
-     *
-     * @param value DokkanDB 日期字符串
-     * @return 日期对象，入参为空或解析失败时返回 null
-     */
-    public static Date parseDokkanDbDate(String value) {
+     * 解析 KX UTC 日期；null 返回 null，非法日期抛异常避免写入错误时间。
+     **/
+    public static Date parseUtcDate(String value) {
         if (StringUtils.isBlank(value)) {
             return null;
         }
-        try {
-            return Date.from(OffsetDateTime.parse(value).toInstant());
-        } catch (Exception ignored) {
-            return parseDokkanDbLocalDate(value);
+        if (value.length() == "yyyy-MM-dd".length()) {
+            return Date.from(LocalDate.parse(value).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
         }
+        return Date.from(OffsetDateTime.parse(value).toInstant());
     }
 
     /**
-     * 将 DokkanDB 未携带时区的日期字符串按东京时区解析。
-     *
-     * @param value DokkanDB 日期字符串
-     * @return 日期对象，解析失败时返回 null
-     */
-    private static Date parseDokkanDbLocalDate(String value) {
+     * 解析 Retry-After 秒数或 RFC 1123 日期；缺失、非法值使用默认毫秒值。
+     **/
+    public static long retryAfterMillis(String value, long fallbackMillis) {
+        if (StringUtils.isBlank(value)) {
+            return fallbackMillis;
+        }
         try {
-            LocalDateTime dateTime = LocalDateTime.parse(value, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-            return Date.from(dateTime.atZone(ZoneId.of(DOKKAN_DB_DEFAULT_ZONE)).toInstant());
-        } catch (Exception ignored) {
-            return null;
+            return Math.max(0L, Math.multiplyExact(Long.parseLong(value.trim()), 1_000L));
+        } catch (RuntimeException ignored) {
+            try {
+                return Math.max(0L, java.time.ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME)
+                        .toInstant().toEpochMilli() - System.currentTimeMillis());
+            } catch (RuntimeException invalidDate) {
+                return fallbackMillis;
+            }
         }
     }
 }

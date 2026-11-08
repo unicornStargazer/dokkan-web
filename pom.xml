@@ -25,7 +25,7 @@
         <jsoup.version>1.17.2</jsoup.version>
         <opencc4j.version>1.6.2</opencc4j.version>
         <elasticsearch.version>7.17.28</elasticsearch.version>
-        <easy-es.version>3.0.0</easy-es.version>
+        <easy-es.version>3.0.1</easy-es.version>
         <minio.version>8.5.17</minio.version>
     </properties>
 

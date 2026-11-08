@@ -1,1039 +1,402 @@
 package com.hb.dokkan.service.job.sync;
 
-import com.baomidou.mybatisplus.extension.service.IService;
-import com.google.common.collect.Maps;
+import com.google.common.collect.Lists;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
-import com.hb.dokkan.common.constants.TranslationConstants;
-import com.hb.dokkan.common.domain.bo.data.WikiCardBO;
-import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoAttribute;
-import com.hb.dokkan.common.domain.dto.data.cards.CardBaseInfoDTO;
-import com.hb.dokkan.common.domain.dto.data.cards.EzaCardInfoDTO;
-import com.hb.dokkan.common.domain.dto.data.cards.SkillDTO;
-import com.hb.dokkan.common.domain.dto.data.cards.SpecialAttackDTO;
-import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardDTO;
-import com.hb.dokkan.common.domain.dto.data.wiki.WikiCardTransformationDTO;
-import com.hb.dokkan.common.domain.dto.data.wiki.WikiCategoryDTO;
-import com.hb.dokkan.common.domain.dto.data.wiki.WikiLinkDTO;
+import com.hb.dokkan.common.domain.bo.data.KxWikiCardBO;
+import com.hb.dokkan.common.domain.dto.data.kx.KxWikiReferenceItemDTO;
 import com.hb.dokkan.common.domain.po.es.cards.CardEsPO;
-import com.hb.dokkan.common.domain.po.mysql.base.BasePO;
-import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.EzaCardPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.SkillPO;
-import com.hb.dokkan.common.domain.po.mysql.cards.SpecialPO;
+import com.hb.dokkan.common.domain.po.mysql.cards.*;
 import com.hb.dokkan.common.domain.po.mysql.category.DokkanCategoryPO;
 import com.hb.dokkan.common.domain.po.mysql.link.DokkanLinkPO;
+import com.hb.dokkan.common.domain.request.cards.CardTagBatchRequest;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
-import com.hb.dokkan.common.utils.JsonUtils;
-import com.hb.dokkan.config.http.HttpPoolProperties;
-import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
 import com.hb.dokkan.infrastructure.es.card.mapper.DokkanEsCardMapper;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanEzaCardRepository;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanSkillRepository;
-import com.hb.dokkan.infrastructure.mysql.cards.DokkanSpecialRepository;
+import com.hb.dokkan.infrastructure.es.card.DokkanEsCardRepository;
+import com.hb.dokkan.infrastructure.mysql.cards.*;
 import com.hb.dokkan.infrastructure.mysql.categories.DokkanCategoryRepository;
 import com.hb.dokkan.infrastructure.mysql.links.DokkanLinkRepository;
-import com.hb.dokkan.service.convert.DokkanSyncConvert;
-import com.hb.dokkan.service.facade.DokkanDbFacade;
+import com.hb.dokkan.service.cards.CardTagRuleService;
 import com.hb.dokkan.service.helper.EsCardSyncHelper;
-import com.hb.dokkan.service.helper.WikiCardHelper;
-import com.hb.dokkan.service.job.sync.factory.FixDataStrategyFactory;
 import com.hb.dokkan.service.job.sync.factory.WikiInfoStrategyFactory;
-import com.hb.dokkan.service.job.sync.strategy.FixDataStrategy;
-import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
+import com.hb.dokkan.service.job.sync.strategy.strategies.WikiCardStrategy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.dromara.easyes.core.conditions.select.LambdaEsQueryWrapper;
-import org.dromara.easyes.core.kernel.EsWrappers;
-import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.util.CollectionUtils;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.Semaphore;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.hb.dokkan.common.constants.DokkanConstants.CARD;
-import static com.hb.dokkan.common.constants.DokkanConstants.CATEGORY;
-import static com.hb.dokkan.common.constants.DokkanConstants.EZA_CARD;
-import static com.hb.dokkan.common.constants.DokkanConstants.LINK;
-import static com.hb.dokkan.common.constants.DokkanConstants.SKILL;
-import static com.hb.dokkan.common.constants.DokkanConstants.SPECIAL;
-
 /**
- * @Description 同步数据服务
- * @Author stargazer
- * @Date 2025/6/2 0:13
+ * @Description KX Wiki 同步编排：事务提交后才刷新 ES，保留逐卡失败记录
+ * @Author Codex
+ * @Date 2026/11/8
  **/
-@Slf4j
 @Component
+@Slf4j
 public class SyncDataService {
-
+    /**
+     * 按数据类型选择 KX Wiki 同步策略的工厂。
+     **/
     @Resource
     private WikiInfoStrategyFactory strategyFactory;
-
+    /**
+     * 卡片列表扫描、候选判定及详情抓取策略。
+     **/
+    @Resource
+    private WikiCardStrategy cardStrategy;
+    /**
+     * 卡片主表访问仓储。
+     **/
     @Resource
     private DokkanCardRepository cardRepository;
-
+    /**
+     * 卡片状态表访问仓储。
+     **/
     @Resource
-    private DokkanEzaCardRepository ezaCardRepository;
-
+    private CardStateRepository stateRepository;
+    /**
+     * 卡片技能表访问仓储。
+     **/
     @Resource
-    private DokkanSkillRepository skillRepository;
-
+    private CardSkillRepository skillRepository;
+    /**
+     * 卡片分类关系表访问仓储。
+     **/
     @Resource
-    private DokkanSpecialRepository specialRepository;
-
+    private CardCategoryRelRepository categoryRelRepository;
+    /**
+     * 卡片链接关系表访问仓储。
+     **/
+    @Resource
+    private CardLinkRelRepository linkRelRepository;
+    /**
+     * 分类字典访问仓储。
+     **/
     @Resource
     private DokkanCategoryRepository categoryRepository;
-
+    /**
+     * 链接技能字典访问仓储。
+     **/
     @Resource
     private DokkanLinkRepository linkRepository;
-
+    /**
+     * 人工标签保护及自动限定标记规则服务。
+     **/
     @Resource
-    private DokkanSyncConvert convert;
-
+    private CardTagRuleService tagRuleService;
+    /**
+     * 卡片 ES 索引管理 Mapper。
+     **/
+    @Resource
+    private DokkanEsCardMapper esCardMapper;
+    /**
+     * 卡片 ES 查询与整文档写入仓储。
+     **/
+    @Resource
+    private DokkanEsCardRepository esCardRepository;
+    /**
+     * 从卡片聚合表组装兼容 ES 文档的助手。
+     **/
+    @Resource
+    private EsCardSyncHelper esCardSyncHelper;
+    /**
+     * 卡片及子表写入使用的事务模板。
+     **/
     @Resource(name = "defaultTransactionTemplate")
     private TransactionTemplate transactionTemplate;
 
-    @Resource
-    private DokkanThreadPoolExecutor dokkanThreadPoolExecutor;
-
-    @Resource
-    private HttpPoolProperties httpPoolProperties;
-
-    @Resource(name = "dokkanExecutor")
-    private TaskExecutor dokkanExecutor;
-
-    @Resource
-    private DokkanEsCardMapper esCardMapper;
-
-    @Resource
-    private EsCardSyncHelper esCardSyncHelper;
-
-    @Resource
-    private FixDataStrategyFactory fixDataStrategyFactory;
-
-    @Resource
-    private DokkanDbFacade dokkanDbFacade;
-
-    @Resource
-    private WikiCardHelper wikiCardHelper;
-
     /**
-     * 增量初始化卡片数据。
-     */
+     * 增量同步 UR/LR，本轮失败不阻断其他卡入库，也不确认源版本。
+     **/
     public void initCard() {
-        log.info("card incremental sync started");
-        WikiInfoStrategy strategy = strategyFactory.getWikiStrategy(WikiInfoTypeEnum.CARD);
         WikiContext context = new WikiContext();
-        strategy.execute(context);
-        WikiCardBO cardData = context.getCardData();
-        if (Objects.isNull(cardData) || CollectionUtils.isEmpty(cardData.getCardBaseData())) {
-            log.info("DokkanDB incremental sync completed, no new or updated cards");
-            return;
+        cardStrategy.execute(context);
+        for (KxWikiCardBO aggregate : context.getCardData()) {
+            Long rootId = aggregate.getCards().getFirst().getCardId();
+            try {
+                persistCardData(aggregate, false);
+                cardStrategy.markCardComplete(rootId);
+            } catch (RuntimeException exception) {
+                context.getFailedCardIds().add(rootId);
+                log.error("KX Wiki persist or ES refresh failed, cardId={}", rootId, exception);
+            }
         }
-        SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ARRANGE_CARD,
-                CardSyncConstants.STAGE_ARRANGE_CARD, CardSyncConstants.MESSAGE_FETCH_COMPLETE_ARRANGE);
-        persistCardData(cardData, true);
-        log.info("card incremental sync completed");
+        if (!context.getFailedCardIds().isEmpty()) {
+            log.error("KX Wiki failed cardIds={}", context.getFailedCardIds());
+            throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
+        }
+        cardStrategy.markVersionComplete(context.getSourceUpdatedAt());
     }
 
     /**
-     * 按指定卡片 ID 同步卡片数据，不使用自动爬虫过滤条件。
-     *
-     * @param cardIds 卡片 ID 列表
-     * @return 成功同步数量
-     */
+     * 按指定 ID 强制同步，不应用自动列表黑名单和 hash 跳过，上限 100。
+     **/
     public int syncCardsByIds(List<Long> cardIds) {
-        return syncCardsByIdsInternal(cardIds, true, false);
-    }
-
-    /**
-     * 按指定卡片 ID 强制重新翻译卡片数据。
-     *
-     * @param cardId 卡片 ID
-     * @return 成功同步数量
-     */
-    public int retranslateCardById(Long cardId) {
-        if (Objects.isNull(cardId) || cardId <= CardSyncConstants.MIN_VALID_CARD_ID) {
-            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
-        }
-        return syncCardsByIdsInternal(List.of(cardId), false, true);
-    }
-
-    /**
-     * 按指定卡片 ID 批量强制重新翻译卡片数据。
-     *
-     * @param cardIds 卡片 ID 列表
-     * @return 成功同步数量
-     */
-    public int retranslateCardsByIds(List<Long> cardIds) {
-        return syncCardsByIdsInternal(cardIds, false, true);
-    }
-
-    /**
-     * 按指定卡片 ID 同步卡片数据。
-     *
-     * @param cardIds                 卡片 ID 列表
-     * @param preserveLocalizedFields 是否保留已有本地化文案
-     * @param forceRetranslate        是否绕过旧翻译缓存重新翻译
-     * @return 成功同步数量
-     */
-    private int syncCardsByIdsInternal(List<Long> cardIds, boolean preserveLocalizedFields, boolean forceRetranslate) {
-        if (CollectionUtils.isEmpty(cardIds)) {
-            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
-        }
-        List<Long> distinctCardIds = cardIds.stream()
-                .filter(Objects::nonNull)
-                .filter(cardId -> cardId > CardSyncConstants.MIN_VALID_CARD_ID)
-                .distinct()
-                .toList();
-        if (CollectionUtils.isEmpty(distinctCardIds)
-                || distinctCardIds.size() > CardSyncConstants.MANUAL_SYNC_MAX_CARD_COUNT) {
-            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
-        }
-
-        log.info("manual card sync started, requestedCardIds:{}, preserveLocalized:{}, forceRetranslate:{}",
-                distinctCardIds, preserveLocalizedFields, forceRetranslate);
-        SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_MANUAL_FETCH_RUNNING,
-                CardSyncConstants.STAGE_FETCH_MANUAL_CARD_RUNNING,
-                CardSyncConstants.MESSAGE_FETCH_MANUAL_CARD_PREFIX + distinctCardIds.size()
-                        + CardSyncConstants.MESSAGE_CARD_ID_SUFFIX);
-
-        // 先按指定 ID 从 DokkanDB 查询原始数据，强制重翻时使用有界并发加速外部拉取和 LLM 组装。
-        List<WikiCardDTO> wikiCards = forceRetranslate ? fetchRetranslateCards(distinctCardIds)
-                : dokkanDbFacade.getCards(distinctCardIds);
-        if (CollectionUtils.isEmpty(wikiCards)) {
-            throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
-        }
-
-        SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_MANUAL_ARRANGE_CARD,
-                CardSyncConstants.STAGE_ARRANGE_CARD,
-                CardSyncConstants.MESSAGE_FETCHED_PREFIX + wikiCards.size()
-                        + CardSyncConstants.MESSAGE_VALID_CARD_SUFFIX);
-
-        // 变身链路中的后续形态也需要一起刷新，避免主卡更新后变身卡仍是旧数据。
-        wikiCards = appendTransformationCards(wikiCards, forceRetranslate);
-
-        // 将外部数据转换为内部同步 BO 后复用统一持久化链路。
-        WikiCardBO cardData = new WikiCardBO();
-        wikiCardHelper.buildData(cardData, wikiCards);
-        return persistCardData(cardData, preserveLocalizedFields);
-    }
-
-    /**
-     * 补充同步变身后的卡片数据。
-     *
-     * @param wikiCards        已抓取卡片列表
-     * @param forceRetranslate 是否强制重新翻译
-     * @return 补充变身卡后的卡片列表
-     */
-    private List<WikiCardDTO> appendTransformationCards(List<WikiCardDTO> wikiCards, boolean forceRetranslate) {
-        if (CollectionUtils.isEmpty(wikiCards)) {
-            return List.of();
-        }
-        Map<Long, WikiCardDTO> cardMap = wikiCards.stream()
-                .filter(card -> Objects.nonNull(card.getCard()))
-                .filter(card -> Objects.nonNull(card.getCard().getId()))
-                .collect(Collectors.toMap(card -> card.getCard().getId(), Function.identity(),
-                        (oldValue, newValue) -> oldValue, LinkedHashMap::new));
-        List<Long> transformationIds = wikiCards.stream()
-                .filter(card -> !CollectionUtils.isEmpty(card.getTransformations()))
-                .flatMap(card -> card.getTransformations().stream())
-                .map(WikiCardTransformationDTO::getNextCardId)
-                .filter(Objects::nonNull)
-                .filter(cardId -> !cardMap.containsKey(cardId))
-                .distinct()
-                .toList();
-        if (CollectionUtils.isEmpty(transformationIds)) {
-            return wikiCards;
-        }
-        List<WikiCardDTO> transformationCards = forceRetranslate ? fetchRetranslateCards(transformationIds)
-                : dokkanDbFacade.getCards(transformationIds);
-        transformationCards.stream()
-                .filter(card -> Objects.nonNull(card.getCard()))
-                .filter(card -> Objects.nonNull(card.getCard().getId()))
-                .forEach(card -> cardMap.putIfAbsent(card.getCard().getId(), card));
-        return new ArrayList<>(cardMap.values());
-    }
-
-    /**
-     * 并发拉取并重新组装待翻译卡片，保持返回顺序与请求 ID 顺序一致。
-     *
-     * @param cardIds 卡片 ID 列表
-     * @return 重新组装后的卡片列表
-     */
-    private List<WikiCardDTO> fetchRetranslateCards(List<Long> cardIds) {
-        int permits = llmConcurrencyPermits();
-        Semaphore semaphore = new Semaphore(permits);
-        log.info("batch retranslate fetch started, cardIds:{}, concurrency:{}", cardIds, permits);
-        List<CompletableFuture<DokkanDbFacade.CardSourceData>> futures = cardIds.stream()
-                .map(cardId -> CompletableFuture.supplyAsync(() -> fetchRetranslateCardSource(cardId, semaphore), dokkanExecutor))
-                .toList();
-        List<DokkanDbFacade.CardSourceData> sources = futures.stream()
-                .map(this::joinRetranslateCardSource)
-                .filter(Objects::nonNull)
-                .toList();
-        List<WikiCardDTO> cards = dokkanDbFacade.assembleCards(sources, true);
-        log.info("batch retranslate fetch completed, requestedCount:{}, fetchedCount:{}", cardIds.size(), cards.size());
-        return cards;
-    }
-
-    /**
-     * 在并发许可控制下拉取单张强制重翻卡片。
-     *
-     * @param cardId    卡片 ID
-     * @param semaphore 并发许可
-     * @return 重新组装后的卡片
-     */
-    private DokkanDbFacade.CardSourceData fetchRetranslateCardSource(Long cardId, Semaphore semaphore) {
-        boolean acquired = false;
-        try {
-            semaphore.acquire();
-            acquired = true;
-            log.info("batch retranslate card started, cardId:{}", cardId);
-            DokkanDbFacade.CardSourceData card = dokkanDbFacade.fetchCardSource(cardId);
-            log.info("batch retranslate card completed, cardId:{}, found:{}", cardId, Objects.nonNull(card));
-            return card;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException(TranslationConstants.LLM_CONCURRENCY_INTERRUPTED_ERROR_MESSAGE, e);
-        } finally {
-            if (acquired) {
-                semaphore.release();
+        List<Long> requested = validateCardIds(cardIds, CardSyncConstants.MANUAL_SYNC_MAX_CARD_COUNT);
+        int completed = 0;
+        List<Long> failed = new ArrayList<>();
+        for (Long cardId : requested) {
+            try {
+                KxWikiCardBO aggregate = cardStrategy.fetchCard(cardId, true);
+                persistCardData(aggregate, true);
+                completed++;
+            } catch (RuntimeException exception) {
+                failed.add(cardId);
+                log.error("KX Wiki manual sync failed, cardId={}", cardId, exception);
             }
         }
-    }
-
-    /**
-     * 获取并发重翻 Future 结果并透传真实异常。
-     *
-     * @param future 卡片重翻 Future
-     * @return 重新组装后的卡片
-     */
-    private DokkanDbFacade.CardSourceData joinRetranslateCardSource(
-            CompletableFuture<DokkanDbFacade.CardSourceData> future) {
-        try {
-            return future.join();
-        } catch (CompletionException e) {
-            Throwable cause = e.getCause() == null ? e : e.getCause();
-            if (cause instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            }
-            throw new IllegalStateException(cause);
-        }
-    }
-
-    /**
-     * 获取 LLM 并发许可数，复用 HTTP 并发配置并做上限保护。
-     *
-     * @return 并发许可数
-     */
-    private int llmConcurrencyPermits() {
-        int configured = httpPoolProperties.getConcurrency().getSemaphorePermits();
-        return Math.max(TranslationConstants.LLM_MIN_CONCURRENCY_PERMITS,
-                Math.min(configured, TranslationConstants.LLM_MAX_CONCURRENCY_PERMITS));
-    }
-
-    /**
-     * 持久化卡片同步数据，并增量刷新对应 ES 文档。
-     *
-     * @param cardData                卡片同步业务对象
-     * @param preserveLocalizedFields 是否保留已有本地化文案
-     * @return 同步卡片数量
-     */
-    private int persistCardData(WikiCardBO cardData, boolean preserveLocalizedFields) {
-        if (Objects.isNull(cardData) || CollectionUtils.isEmpty(cardData.getCardBaseData())) {
+        if (!failed.isEmpty()) {
+            log.error("KX Wiki manual sync partial failure, completed={}, failedIds={}", completed, failed);
             throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
         }
-        log.info("persisting card data, cards:{}, skills:{}, eza:{}, specials:{}",
-                cardData.getCardBaseData().size(),
-                CollectionUtils.isEmpty(cardData.getDownPullSkills())
-                        ? 0 : cardData.getDownPullSkills().size(),
-                CollectionUtils.isEmpty(cardData.getEzaCardInfos())
-                        ? 0 : cardData.getEzaCardInfos().size(),
-                CollectionUtils.isEmpty(cardData.getSpecialAttacks())
-                        ? 0 : cardData.getSpecialAttacks().size());
+        return completed;
+    }
+
+    /**
+     * 单张本体聚合事务写入；子表先删后插，tag_locked 在锁定旧行后合并。
+     * 相同 hash 跳过 MySQL，但仍刷新 ES，以恢复上一次提交后 ES 失败的卡片。
+     **/
+    private void persistCardData(KxWikiCardBO aggregate, boolean force) {
+        List<Long> ids = aggregate.getCards().stream().map(CardPO::getCardId).toList();
         SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_MYSQL_WRITE,
                 CardSyncConstants.STAGE_WRITE_MYSQL, CardSyncConstants.MESSAGE_WRITE_CARD_DATA);
-        Set<Long> ezaSyncCardIds = buildEzaSyncCardIds(cardData.getEzaCardInfos());
-        Boolean mysqlSyncSucceeded = transactionTemplate.execute(status -> {
-            try {
-                // MySQL 数据写入需要放在同一个事务内；EZA 存量卡只刷新极限技能数据，不覆盖卡片主表。
-                insertCardBaseInfo(cardData.getCardBaseData(), preserveLocalizedFields, ezaSyncCardIds);
-                insertDownPullSkillInfo(cardData.getDownPullSkills(), preserveLocalizedFields);
-                insertEzaCardInfo(cardData.getEzaCardInfos(), preserveLocalizedFields);
-                insertSpecialInfo(cardData.getSpecialAttacks(), preserveLocalizedFields);
-                return true;
-            } catch (Exception e) {
-                log.error("SyncDataService#persistCardData error :{}", e.getMessage(), e);
-                status.setRollbackOnly();
-                return false;
-            }
-        });
-        if (!Boolean.TRUE.equals(mysqlSyncSucceeded)) {
-            throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR);
+        try {
+            transactionTemplate.executeWithoutResult(status -> {
+                Map<Long, CardPO> existing = cardRepository.lockByCardIds(ids).stream()
+                        .collect(Collectors.toMap(CardPO::getCardId, Function.identity()));
+                Set<Long> changed = new HashSet<>();
+                // 主记录和所有子表在同一事务中更新，任何一项写入失败均回滚。
+                for (CardPO incoming : aggregate.getCards()) {
+                    CardPO old = existing.get(incoming.getCardId());
+                    if (shouldSkipCardWrite(force, old, incoming)) {
+                        continue;
+                    }
+                    changed.add(incoming.getCardId());
+                    tagRuleService.apply(incoming, old);
+                    if (old != null) {
+                        incoming.setId(old.getId());
+                        incoming.setCreator(old.getCreator());
+                        incoming.setCreateTime(old.getCreateTime());
+                    }
+                    if (!cardRepository.saveOrUpdate(incoming)) {
+                        throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR);
+                    }
+                }
+                List<Long> changedIds = ids.stream().filter(changed::contains).toList();
+                stateRepository.deleteByCardIds(changedIds);
+                skillRepository.deleteByCardIds(changedIds);
+                categoryRelRepository.deleteByCardIds(changedIds);
+                linkRelRepository.deleteByCardIds(changedIds);
+                stateRepository.insertBatch(aggregate.getStates().stream().filter(row -> changed.contains(row.getCardId())).toList());
+                skillRepository.insertBatch(aggregate.getSkills().stream().filter(row -> changed.contains(row.getCardId())).toList());
+                categoryRelRepository.insertBatch(aggregate.getCategories().stream().filter(row -> changed.contains(row.getCardId())).toList());
+                linkRelRepository.insertBatch(aggregate.getLinks().stream().filter(row -> changed.contains(row.getCardId())).toList());
+                if (!changedIds.isEmpty()) {
+                    upsertLinks(aggregate.getLinkDefinitions(), true);
+                }
+            });
+        } catch (RuntimeException exception) {
+            log.error("KX Wiki transaction rolled back, cardIds={}", ids, exception);
+            throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR, exception);
         }
         SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ES_SYNC,
                 CardSyncConstants.STAGE_SYNC_ES, CardSyncConstants.MESSAGE_UPDATE_ES_DOCUMENT);
-        List<Long> syncedCardIds = cardData.getCardBaseData().stream()
-                .map(CardBaseInfoDTO::getCardId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        if (!CollectionUtils.isEmpty(syncedCardIds)) {
-            syncEsCardsByCardIds(syncedCardIds);
-        }
-        SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ICON_SYNC,
-                CardSyncConstants.STAGE_SYNC_ICON, CardSyncConstants.MESSAGE_ICON_SYNC_HANDLED);
-        return syncedCardIds.size();
+        syncEsCardsByCardIds(ids);
     }
 
     /**
-     * 初始化分类数据。
-     */
+     * 初始化分类，保护现有中文名，只新增缺失项并更新英文名。
+     **/
     public void initCategories() {
-        WikiInfoStrategy strategy = strategyFactory.getWikiStrategy(WikiInfoTypeEnum.CATEGORY);
         WikiContext context = new WikiContext();
-        strategy.execute(context);
-        List<WikiCategoryDTO> categoryData = context.getCategoryData();
-        if (CollectionUtils.isEmpty(categoryData)) {
-            log.error("初始化失败，获取分类为空");
-            return;
-        }
-        transactionTemplate.execute(status -> {
-            try {
-                List<WikiCategoryDTO> data = distinctList(categoryData);
-                List<DokkanCategoryPO> incoming = convert.convertToCategoryPO(data);
-                Map<Long, DokkanCategoryPO> existingCategories = categoryRepository.list().stream()
-                        .filter(row -> Objects.nonNull(row.getCategoryId()))
-                        .collect(Collectors.toMap(DokkanCategoryPO::getCategoryId, Function.identity(),
-                                (left, right) -> left));
-                List<DokkanCategoryPO> missing = new ArrayList<>();
-                List<DokkanCategoryPO> updates = new ArrayList<>();
-                for (DokkanCategoryPO row : incoming) {
-                    if (Objects.isNull(row.getCategoryId())) {
-                        continue;
-                    }
-                    DokkanCategoryPO existing = existingCategories.get(row.getCategoryId());
-                    if (Objects.isNull(existing)) {
-                        missing.add(row);
-                        continue;
-                    }
-                    if (StringUtils.isNotBlank(row.getCategoryNameEn())
-                            && !Objects.equals(existing.getCategoryNameEn(), row.getCategoryNameEn())) {
-                        existing.setCategoryNameEn(row.getCategoryNameEn());
-                        updates.add(existing);
-                    }
+        strategyFactory.getWikiStrategy(WikiInfoTypeEnum.CATEGORY).execute(context);
+        Map<Long, String> english = context.getEnglishCategoryData().stream().filter(row -> row.getName() != null)
+                .collect(Collectors.toMap(KxWikiReferenceItemDTO::getId, KxWikiReferenceItemDTO::getName));
+        transactionTemplate.executeWithoutResult(status -> {
+            Map<Long, DokkanCategoryPO> existing = categoryRepository.list().stream()
+                    .collect(Collectors.toMap(DokkanCategoryPO::getCategoryId, Function.identity()));
+            for (KxWikiReferenceItemDTO source : context.getCategoryData()) {
+                DokkanCategoryPO category = existing.get(source.getId());
+                if (category == null) {
+                    category = new DokkanCategoryPO();
+                    category.setCategoryId(source.getId());
+                    category.setCategoryName(source.getName());
                 }
-                if (!missing.isEmpty()) {
-                    categoryRepository.saveBatch(missing);
+                category.setCategoryNameEn(english.get(source.getId()));
+                if (!categoryRepository.saveOrUpdate(category)) {
+                    throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR);
                 }
-                if (!updates.isEmpty()) {
-                    categoryRepository.updateBatchById(updates);
-                }
-                log.info("DokkanDB category sync completed, fetched:{}, inserted:{}, updated:{}", data.size(),
-                        missing.size(), updates.size());
-            } catch (Exception e) {
-                log.error("SyncDataService#initCategories error :{}", e.getMessage(), e);
-                status.setRollbackOnly();
             }
-            return null;
         });
     }
 
     /**
-     * 初始化链接数据。
-     */
+     * reference 仅补齐已有链接的空名称/1级描述；新链接由详情补齐满级描述后插入。
+     **/
     public void initLinks() {
-        WikiInfoStrategy strategy = strategyFactory.getWikiStrategy(WikiInfoTypeEnum.LINK);
         WikiContext context = new WikiContext();
-        strategy.execute(context);
-        List<WikiLinkDTO> linkData = context.getLinkData();
-        if (CollectionUtils.isEmpty(linkData)) {
-            log.error("初始化失败，获取链接为空");
-            return;
-        }
-        transactionTemplate.execute(status -> {
-            try {
-                List<WikiLinkDTO> data = distinctList(linkData);
-                List<DokkanLinkPO> incoming = convert.convertToLinkPO(data);
-                Set<Long> existingIds = linkRepository.list().stream()
-                        .map(DokkanLinkPO::getLinkId)
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet());
-                List<DokkanLinkPO> missing = incoming.stream()
-                        .filter(row -> row.getLinkId() != null && !existingIds.contains(row.getLinkId()))
-                        .filter(row -> StringUtils.isNoneBlank(row.getLinkName(), row.getLevel1Description(),
-                                row.getLevel10Description()))
-                        .toList();
-                if (!missing.isEmpty()) {
-                    linkRepository.saveBatch(missing);
+        strategyFactory.getWikiStrategy(WikiInfoTypeEnum.LINK).execute(context);
+        List<DokkanLinkPO> incoming = context.getLinkData().stream().map(source -> {
+            DokkanLinkPO link = new DokkanLinkPO();
+            link.setLinkId(source.getId());
+            link.setLinkName(source.getName());
+            link.setLevel1Description(source.getDescription());
+            return link;
+        }).toList();
+        transactionTemplate.executeWithoutResult(status -> upsertLinks(incoming, false));
+    }
+
+    /**
+     * 事务内链接补齐，已有名称保持人工值；卡片详情允许插入完整的新链接。
+     **/
+    private void upsertLinks(List<DokkanLinkPO> incoming, boolean allowInsert) {
+        Map<Long, DokkanLinkPO> existing = linkRepository.list().stream()
+                .collect(Collectors.toMap(DokkanLinkPO::getLinkId, Function.identity()));
+        for (DokkanLinkPO source : incoming) {
+            DokkanLinkPO old = existing.get(source.getLinkId());
+            if (old == null) {
+                if (allowInsert && StringUtils.isNoneBlank(source.getLinkName(), source.getLevel1Description(), source.getLevel10Description())) {
+                    if (!linkRepository.save(source)) {
+                        throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR);
+                    }
+                    existing.put(source.getLinkId(), source);
                 }
-                log.info("DokkanDB link sync completed, fetched:{}, inserted:{}", data.size(), missing.size());
-            } catch (Exception e) {
-                log.error("SyncDataService#initLinks error :{}", e.getMessage(), e);
-                status.setRollbackOnly();
+                continue;
             }
-            return null;
-        });
-    }
-
-    /**
-     * 全量同步 ES 卡片数据。
-     */
-    public void syncEsCardData() {
-        log.info("full ES card sync started");
-        SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ES_PREPARE,
-                CardSyncConstants.STAGE_PREPARE_ES_INDEX, CardSyncConstants.MESSAGE_PREPARE_ES_INDEX);
-        if (esCardMapper.existsIndex(DokkanEsCardMapper.INDEX_NAME)
-                && !esCardMapper.deleteIndex(DokkanEsCardMapper.INDEX_NAME)) {
-            log.error("删除es索引失败 indexName:{}", DokkanEsCardMapper.INDEX_NAME);
-            throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
-        }
-        if (!esCardMapper.createIndex()) {
-            log.error("创建es索引失败 indexName:{}", DokkanEsCardMapper.INDEX_NAME);
-            throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
-        }
-        Map<String, List<?>> dataMap = Maps.newHashMap();
-        // 并行查询 MySQL 关联数据，减少全量 ES 重建等待时间。
-        Future<List<CardPO>> cardFuture = dokkanThreadPoolExecutor.submit(() -> cardRepository.list());
-        Future<List<EzaCardPO>> ezaCardFuture = dokkanThreadPoolExecutor.submit(() -> ezaCardRepository.list());
-        Future<List<SpecialPO>> specialFuture = dokkanThreadPoolExecutor.submit(() -> specialRepository.list());
-        Future<List<SkillPO>> skillFuture = dokkanThreadPoolExecutor.submit(() -> skillRepository.list());
-        Future<List<DokkanLinkPO>> linkFuture = dokkanThreadPoolExecutor.submit(() -> linkRepository.list());
-        Future<List<DokkanCategoryPO>> categoryFuture = dokkanThreadPoolExecutor.submit(() -> categoryRepository.list());
-        try {
-            List<CardPO> cardPOS = cardFuture.get();
-            List<EzaCardPO> ezaCardPOS = ezaCardFuture.get();
-            List<SpecialPO> specialPOS = specialFuture.get();
-            List<SkillPO> skillPOS = skillFuture.get();
-            List<DokkanLinkPO> linkPOS = linkFuture.get();
-            List<DokkanCategoryPO> categoryPOS = categoryFuture.get();
-            dataMap.put(CARD, cardPOS);
-            dataMap.put(EZA_CARD, ezaCardPOS);
-            dataMap.put(SPECIAL, specialPOS);
-            dataMap.put(SKILL, skillPOS);
-            dataMap.put(LINK, linkPOS);
-            dataMap.put(CATEGORY, categoryPOS);
-            SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ES_READ_COMPLETE,
-                    CardSyncConstants.STAGE_READ_MYSQL,
-                    CardSyncConstants.MESSAGE_MYSQL_READ_COMPLETE_PREFIX + cardPOS.size()
-                            + CardSyncConstants.MESSAGE_CARD_COUNT_UNIT_SUFFIX);
-        } catch (Exception e) {
-            log.error("query db data error :{}", e.getMessage(), e);
-            throw new DokkanBizException(CardSyncConstants.QUERY_DB_DATA_ERROR_MESSAGE + CardSyncConstants.KEY_SEPARATOR
-                    + e.getMessage());
-        }
-        List<CardEsPO> esCards = esCardSyncHelper.buildEsCardPO(dataMap);
-        SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ES_DOC_BUILD,
-                CardSyncConstants.STAGE_BUILD_ES_DOCUMENT,
-                CardSyncConstants.MESSAGE_ES_DOCUMENT_BUILT_PREFIX
-                        + (CollectionUtils.isEmpty(esCards) ? 0 : esCards.size())
-                        + CardSyncConstants.MESSAGE_ES_DOCUMENT_COUNT_SUFFIX);
-        if (CollectionUtils.isEmpty(esCards)) {
-            log.error("构建es卡片索引失败");
-            return;
-        }
-        try {
-            Integer insertCnt = esCardMapper.insertBatch(esCards);
-            log.info("同步es卡片索引成功,insetCnt:{}", insertCnt);
-        } catch (Exception e) {
-            log.error("SyncDataService#syncEsCardData error :{}", e.getMessage(), e);
-            throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR, e);
-        }
-    }
-
-    /**
-     * 根据 cardId 增量同步 ES 卡片数据。
-     *
-     * @param cardIds cardId 集合
-     * @return 同步数量
-     */
-    private int syncEsCardsByCardIds(List<Long> cardIds) {
-        List<Long> distinctCardIds = cardIds.stream()
-                .filter(Objects::nonNull)
-                .distinct()
-                .collect(Collectors.toList());
-        if (CollectionUtils.isEmpty(distinctCardIds)) {
-            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
-        }
-
-        if (!esCardMapper.existsIndex(DokkanEsCardMapper.INDEX_NAME) && !esCardMapper.createIndex()) {
-            log.error("create ES index failed, indexName:{}", DokkanEsCardMapper.INDEX_NAME);
-            throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
-        }
-
-        Map<String, List<?>> dataMap = Maps.newHashMap();
-        try {
-            dataMap.put(CARD, cardRepository.batchQueryByCardIds(distinctCardIds));
-            dataMap.put(EZA_CARD, ezaCardRepository.list());
-            dataMap.put(SPECIAL, specialRepository.list());
-            dataMap.put(SKILL, skillRepository.list());
-            dataMap.put(LINK, linkRepository.list());
-            dataMap.put(CATEGORY, categoryRepository.list());
-        } catch (Exception e) {
-            log.error("query incremental ES sync data failed", e);
-            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR, e);
-        }
-
-        // 先构建新 ES 文档，再覆盖旧文档，避免构建失败导致旧数据被清空。
-        List<CardEsPO> esCards = esCardSyncHelper.buildEsCardPO(dataMap);
-        if (CollectionUtils.isEmpty(esCards)) {
-            log.info("incremental ES sync completed with no MySQL cards, requestedCardIds:{}", distinctCardIds);
-            return 0;
-        }
-        List<String> documentIds = esCards.stream()
-                .map(CardEsPO::getId)
-                .filter(Objects::nonNull)
-                .distinct()
-                .toList();
-        List<CardEsPO> existingEsCards = esCardMapper.selectBatchIds(documentIds);
-        Set<String> existingDocumentIds = CollectionUtils.isEmpty(existingEsCards) ? Set.of() : existingEsCards.stream()
-                .map(CardEsPO::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        List<CardEsPO> updateCards = esCards.stream()
-                .filter(card -> existingDocumentIds.contains(card.getId()))
-                .toList();
-        List<CardEsPO> insertCards = esCards.stream()
-                .filter(card -> !existingDocumentIds.contains(card.getId()))
-                .toList();
-        Integer updateCount = CollectionUtils.isEmpty(updateCards) ? 0 : esCardMapper.updateBatchByIds(updateCards);
-        Integer insertCount = CollectionUtils.isEmpty(insertCards) ? 0 : esCardMapper.insertBatch(insertCards);
-        int syncedCount = (updateCount == null ? 0 : updateCount) + (insertCount == null ? 0 : insertCount);
-        log.info("incremental ES card sync completed, requestedCardIds:{}, updatedCount:{}, insertedCount:{}",
-                distinctCardIds, updateCount, insertCount);
-        return syncedCount;
-    }
-
-    /**
-     * 写入必杀技数据，已有记录仅刷新必杀技能变化字段。
-     *
-     * @param specialAttacks          必杀技同步数据
-     * @param preserveLocalizedFields 是否保留已有本地化文案
-     */
-    private void insertSpecialInfo(List<SpecialAttackDTO> specialAttacks, boolean preserveLocalizedFields) {
-        if (CollectionUtils.isEmpty(specialAttacks)) {
-            return;
-        }
-        List<SpecialAttackDTO> distinctList = distinctByKey(specialAttacks, SpecialAttackDTO::getSpecialId);
-        List<SpecialPO> specialPOS = convert.wikiSpecial2POList(distinctList);
-        Map<Long, SpecialPO> existingSpecials = specialRepository.batchQueryBySpecialIds(
-                        specialPOS.stream().map(SpecialPO::getSpecialId).toList())
-                .stream().collect(Collectors.toMap(SpecialPO::getSpecialId, Function.identity(),
-                        (oldValue, newValue) -> oldValue));
-        specialPOS.forEach(special -> {
-            SpecialPO existing = existingSpecials.get(special.getSpecialId());
-            if (existing == null) {
-                return;
+            boolean changed = false;
+            if (shouldFillLinkName(allowInsert, old, source)) {
+                old.setLinkName(source.getLinkName());
+                changed = true;
             }
-            special.setId(existing.getId());
-            if (preserveLocalizedFields) {
-                preserveExistingSpecialFields(special, existing);
+            if (StringUtils.isBlank(old.getLevel1Description()) && StringUtils.isNotBlank(source.getLevel1Description())) {
+                old.setLevel1Description(source.getLevel1Description());
+                changed = true;
             }
-        });
-        saveOrUpdateByKnownId(specialRepository, specialPOS, CardSyncConstants.SPECIAL_SAVE_BATCH_SIZE);
-    }
-
-    /**
-     * 写入极限数据，新阶段完整新增，已有阶段仅刷新被动技能字段。
-     *
-     * @param ezaCardInfos           极限同步数据
-     * @param preserveLocalizedFields 是否保留已有本地化文案
-     */
-    private void insertEzaCardInfo(List<EzaCardInfoDTO> ezaCardInfos, boolean preserveLocalizedFields) {
-        if (CollectionUtils.isEmpty(ezaCardInfos)) {
-            return;
-        }
-        List<EzaCardInfoDTO> distinctList = distinctByKey(ezaCardInfos, this::ezaCardKey);
-        List<EzaCardPO> ezaCardPOS = convert.wikiEza2POList(distinctList);
-        Map<String, EzaCardPO> existingCards = ezaCardRepository.batchQueryByCardIds(
-                        ezaCardPOS.stream().map(EzaCardPO::getCardId).distinct().toList())
-                .stream().collect(Collectors.toMap(this::ezaCardKey, Function.identity(),
-                        (oldValue, newValue) -> oldValue));
-        ezaCardPOS.forEach(ezaCard -> {
-            EzaCardPO existing = existingCards.get(ezaCardKey(ezaCard));
-            if (existing == null) {
-                return;
+            if (StringUtils.isBlank(old.getLevel10Description()) && StringUtils.isNotBlank(source.getLevel10Description())) {
+                old.setLevel10Description(source.getLevel10Description());
+                changed = true;
             }
-            ezaCard.setId(existing.getId());
-            if (preserveLocalizedFields) {
-                preserveExistingEzaFields(ezaCard, existing);
-            } else if (ezaCard.getCost() == null) {
-                ezaCard.setCost(existing.getCost());
-            }
-        });
-        saveOrUpdateByKnownId(ezaCardRepository, ezaCardPOS, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
-    }
-
-    /**
-     * 保留已有 EZA 字段，只允许被动技能内容随 EZA 更新变化。
-     *
-     * @param incoming 即将写入的 EZA 记录
-     * @param existing 数据库已有 EZA 记录
-     */
-    private void preserveExistingEzaFields(EzaCardPO incoming, EzaCardPO existing) {
-        Integer newPassiveSkillId = incoming.getPassiveSkillId();
-        String newPassiveSkillDesc = incoming.getPassiveSkillDesc();
-        String newAttributes = mergeEzaPassiveAttributes(incoming.getAttributes(), existing.getAttributes());
-        incoming.setCardId(existing.getCardId());
-        incoming.setCardName(existing.getCardName());
-        incoming.setLvMax(existing.getLvMax());
-        incoming.setStep(existing.getStep());
-        incoming.setTitle(existing.getTitle());
-        incoming.setType(existing.getType());
-        incoming.setPropType(existing.getPropType());
-        incoming.setCost(existing.getCost());
-        incoming.setRarity(existing.getRarity());
-        incoming.setHpValue(existing.getHpValue());
-        incoming.setAtkValue(existing.getAtkValue());
-        incoming.setDefValue(existing.getDefValue());
-        incoming.setPublishTime(existing.getPublishTime());
-        incoming.setLeaderSkillId(existing.getLeaderSkillId());
-        incoming.setLeaderSkill(existing.getLeaderSkill());
-        incoming.setPassiveSkillId(newPassiveSkillId);
-        incoming.setPassiveSkillDesc(newPassiveSkillDesc);
-        incoming.setAttributes(newAttributes);
-    }
-
-    /**
-     * 合并 EZA 属性 JSON，只刷新被动技能字段，其余属性保持旧值。
-     *
-     * @param incomingAttributes 外部同步属性 JSON
-     * @param existingAttributes 数据库已有属性 JSON
-     * @return 合并后的属性 JSON
-     */
-    private String mergeEzaPassiveAttributes(String incomingAttributes, String existingAttributes) {
-        if (StringUtils.isBlank(existingAttributes)) {
-            return incomingAttributes;
-        }
-        if (StringUtils.isBlank(incomingAttributes)) {
-            return existingAttributes;
-        }
-        try {
-            CardBaseInfoAttribute incoming = JsonUtils.json2Object(incomingAttributes, CardBaseInfoAttribute.class);
-            CardBaseInfoAttribute existing = JsonUtils.json2Object(existingAttributes, CardBaseInfoAttribute.class);
-            if (Objects.isNull(incoming) || Objects.isNull(existing)) {
-                return existingAttributes;
-            }
-            existing.setPassiveSkillSetId(incoming.getPassiveSkillSetId());
-            existing.setPassiveSkillName(incoming.getPassiveSkillName());
-            existing.setPassiveSkillDesc(incoming.getPassiveSkillDesc());
-            return JsonUtils.object2Json(existing);
-        } catch (Exception e) {
-            log.warn("merge EZA passive attributes failed", e);
-            return existingAttributes;
-        }
-    }
-
-    /**
-     * 保留已有必杀记录字段，只允许必杀技能内容随 EZA 更新变化。
-     *
-     * @param incoming 即将写入的必杀记录
-     * @param existing 数据库已有必杀记录
-     */
-    private void preserveExistingSpecialFields(SpecialPO incoming, SpecialPO existing) {
-        String newDescription = incoming.getDescription();
-        Integer newIncreaseRate = incoming.getIncreaseRate();
-        Integer newLvBonus = incoming.getLvBonus();
-        String newStyle = incoming.getStyle();
-        Integer newSpecialBonus1Lv = incoming.getSpecialBonus1Lv();
-        Integer newSpecialBonus2Lv = incoming.getSpecialBonus2Lv();
-        incoming.setSpecialId(existing.getSpecialId());
-        incoming.setDescription(newDescription);
-        incoming.setIncreaseRate(newIncreaseRate);
-        incoming.setLvBonus(newLvBonus);
-        incoming.setStyle(newStyle);
-        incoming.setLvStart(existing.getLvStart());
-        incoming.setEballNumStart(existing.getEballNumStart());
-        incoming.setSpecialCategoryId(existing.getSpecialCategoryId());
-        incoming.setSpecialCategoryName(existing.getSpecialCategoryName());
-        incoming.setSpecialBonus1(existing.getSpecialBonus1());
-        incoming.setSpecialBonus2(existing.getSpecialBonus2());
-        incoming.setSpecialBonus1Lv(newSpecialBonus1Lv);
-        incoming.setSpecialBonus2Lv(newSpecialBonus2Lv);
-        incoming.setAttributes(existing.getAttributes());
-    }
-
-    /**
-     * 写入下拉技能数据，已有记录保留本地化字段。
-     *
-     * @param downPullSkills          下拉技能同步数据
-     * @param preserveLocalizedFields 是否保留已有本地化文案
-     */
-    private void insertDownPullSkillInfo(List<SkillDTO> downPullSkills, boolean preserveLocalizedFields) {
-        List<SkillDTO> distinctList = distinctByKey(downPullSkills, SkillDTO::getSkillId);
-        List<SkillPO> skillPOS = convert.wikiSkill2POList(distinctList);
-        if (CollectionUtils.isEmpty(skillPOS)) {
-            return;
-        }
-        Map<String, SkillPO> existingSkills = skillRepository.batchQueryBySkillIds(
-                        skillPOS.stream().map(SkillPO::getSkillId).toList())
-                .stream().collect(Collectors.toMap(SkillPO::getSkillId, Function.identity(),
-                        (oldValue, newValue) -> oldValue));
-        skillPOS.forEach(skill -> {
-            SkillPO existing = existingSkills.get(skill.getSkillId());
-            if (existing == null) {
-                return;
-            }
-            skill.setId(existing.getId());
-            if (preserveLocalizedFields) {
-                skill.setName(existing.getName());
-                skill.setConditionDescription(existing.getConditionDescription());
-                skill.setEffectDescription(existing.getEffectDescription());
-                skill.setSpecialCategoryName(existing.getSpecialCategoryName());
-            }
-        });
-        saveOrUpdateByKnownId(skillRepository, skillPOS, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
-    }
-
-    /**
-     * 构建本次包含 EZA 数据的卡片 ID。
-     *
-     * @param ezaCardInfos 极限同步数据
-     * @return EZA 卡片 ID 集合
-     */
-    private Set<Long> buildEzaSyncCardIds(List<EzaCardInfoDTO> ezaCardInfos) {
-        if (CollectionUtils.isEmpty(ezaCardInfos)) {
-            return Set.of();
-        }
-        return ezaCardInfos.stream()
-                .map(EzaCardInfoDTO::getCardId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-    }
-
-    /**
-     * 写入卡片基础数据，EZA 已有卡片不覆盖主表字段。
-     *
-     * @param cards                   卡片基础同步数据
-     * @param preserveLocalizedFields 是否保留已有本地化文案
-     * @param ezaSyncCardIds          本次同步包含 EZA 数据的卡片 ID
-     */
-    private void insertCardBaseInfo(List<CardBaseInfoDTO> cards, boolean preserveLocalizedFields, Set<Long> ezaSyncCardIds) {
-        List<CardBaseInfoDTO> distinctedList = distinctByKey(cards, CardBaseInfoDTO::getCardId);
-        List<CardPO> cardModel = convert.wikiCard2POList(distinctedList);
-        checkParam(cardModel);
-        Map<Long, CardPO> existingCards = cardRepository.batchQueryByCardIds(
-                        cardModel.stream().map(CardPO::getCardId).toList())
-                .stream().collect(Collectors.toMap(CardPO::getCardId, Function.identity(),
-                        (oldValue, newValue) -> oldValue));
-        List<CardPO> cardsToPersist = new ArrayList<>();
-        cardModel.forEach(card -> {
-            CardPO existing = existingCards.get(card.getCardId());
-            if (isExistingEzaOnlySyncCard(card, existing, ezaSyncCardIds)) {
-                // EZA 数据属于 eza_card，已有主卡不执行无意义的 card 表更新。
-                return;
-            }
-            card.setId(existing == null ? null : existing.getId());
-            if (preserveLocalizedFields) {
-                preserveExistingLocalizedFields(card, existing);
-            } else if (existing != null && card.getCost() == null) {
-                card.setCost(existing.getCost());
-            }
-            cardsToPersist.add(card);
-        });
-        log.info("card base persistence prepared, incomingCards:{}, persistedCards:{}, skippedExistingEzaCards:{}",
-                cardModel.size(), cardsToPersist.size(), cardModel.size() - cardsToPersist.size());
-        saveOrUpdateByKnownId(cardRepository, cardsToPersist, CardSyncConstants.CARD_SAVE_BATCH_SIZE);
-    }
-
-    /**
-     * 判断当前记录是否为已有纯 EZA 卡片。
-     *
-     * 变身后的卡可能同时包含 EZA 数据，但它的普通卡片详情仍需写入 card 表，
-     * 因此只有没有变身关系的 EZA 卡才跳过主表更新。
-     *
-     * @param incoming       即将写入的卡片记录
-     * @param existing       数据库已有卡片记录
-     * @param ezaSyncCardIds 本次同步包含 EZA 数据的卡片 ID
-     * @return 是否为已有 EZA 同步卡片
-     */
-    private boolean isExistingEzaOnlySyncCard(CardPO incoming, CardPO existing, Set<Long> ezaSyncCardIds) {
-        return Objects.nonNull(existing) && Objects.nonNull(incoming)
-                && !CollectionUtils.isEmpty(ezaSyncCardIds) && ezaSyncCardIds.contains(incoming.getCardId())
-                && !hasTransformationData(incoming);
-    }
-
-    /**
-     * 判断卡片基础属性中是否携带变身关系。
-     *
-     * @param card 卡片基础持久化对象
-     * @return true 表示当前同步包含变身卡详情
-     */
-    private boolean hasTransformationData(CardPO card) {
-        if (Objects.isNull(card) || StringUtils.isBlank(card.getAttributes())) {
-            return false;
-        }
-        try {
-            CardBaseInfoAttribute attributes = JsonUtils.json2Object(
-                    card.getAttributes(), CardBaseInfoAttribute.class);
-            return Objects.nonNull(attributes) && !CollectionUtils.isEmpty(attributes.getNextCards());
-        } catch (Exception e) {
-            log.warn("parse card transformation attributes failed, cardId:{}", card.getCardId(), e);
-            return false;
-        }
-    }
-
-    /**
-     * EZA-only 更新时保留已有中文基础文案，避免机器翻译覆盖人工修正内容。
-     *
-     * @param incoming 即将写入的卡片记录
-     * @param existing 数据库已有卡片记录
-     */
-    private void preserveExistingLocalizedFields(CardPO incoming, CardPO existing) {
-        if (existing == null) {
-            return;
-        }
-        incoming.setCardName(existing.getCardName());
-        incoming.setTitle(existing.getTitle());
-        if (incoming.getCost() == null) {
-            incoming.setCost(existing.getCost());
-        }
-        try {
-            CardBaseInfoAttribute oldAttributes = JsonUtils.json2Object(
-                    existing.getAttributes(), CardBaseInfoAttribute.class);
-            CardBaseInfoAttribute newAttributes = JsonUtils.json2Object(
-                    incoming.getAttributes(), CardBaseInfoAttribute.class);
-            if (oldAttributes == null || newAttributes == null) {
-                return;
-            }
-            newAttributes.setLeaderSkill(oldAttributes.getLeaderSkill());
-            newAttributes.setPassiveSkillName(oldAttributes.getPassiveSkillName());
-            newAttributes.setPassiveSkillDesc(oldAttributes.getPassiveSkillDesc());
-            newAttributes.setActiveSkillName(oldAttributes.getActiveSkillName());
-            newAttributes.setActiveSkillEffect(oldAttributes.getActiveSkillEffect());
-            newAttributes.setActiveSkillCondition(oldAttributes.getActiveSkillCondition());
-            incoming.setAttributes(JsonUtils.object2Json(newAttributes));
-        } catch (Exception e) {
-            log.warn("preserve localized card fields failed, cardId:{}", incoming.getCardId(), e);
-        }
-    }
-
-    /**
-     * 根据是否已有主键分别执行批量新增或批量更新。
-     *
-     * @param repository 数据仓储
-     * @param entities   待保存实体
-     * @param batchSize  批量大小
-     * @param <T>        实体类型
-     */
-    private <T extends BasePO> void saveOrUpdateByKnownId(IService<T> repository, List<T> entities, int batchSize) {
-        if (CollectionUtils.isEmpty(entities)) {
-            return;
-        }
-        List<T> insertEntities = entities.stream().filter(entity -> Objects.isNull(entity.getId())).toList();
-        List<T> updateEntities = entities.stream().filter(entity -> Objects.nonNull(entity.getId())).toList();
-        if (!CollectionUtils.isEmpty(insertEntities)) {
-            repository.saveBatch(insertEntities, batchSize);
-        }
-        if (!CollectionUtils.isEmpty(updateEntities)) {
-            repository.updateBatchById(updateEntities, batchSize);
-        }
-    }
-
-    /**
-     * 构建 EZA DTO 去重 key。
-     *
-     * @param ezaCard EZA DTO
-     * @return 去重 key
-     */
-    private String ezaCardKey(EzaCardInfoDTO ezaCard) {
-        return ezaCard.getCardId() + CardSyncConstants.KEY_SEPARATOR + ezaCard.getStep();
-    }
-
-    /**
-     * 构建 EZA PO 去重 key。
-     *
-     * @param ezaCard EZA PO
-     * @return 去重 key
-     */
-    private String ezaCardKey(EzaCardPO ezaCard) {
-        return ezaCard.getCardId() + CardSyncConstants.KEY_SEPARATOR + ezaCard.getStep();
-    }
-
-    /**
-     * 按业务 key 去重并过滤空 key 数据。
-     *
-     * @param dataList     原始数据列表
-     * @param keyExtractor key 提取器
-     * @param <T>          数据类型
-     * @param <K>          key 类型
-     * @return 去重后的数据列表
-     */
-    private <T, K> List<T> distinctByKey(List<T> dataList, Function<T, K> keyExtractor) {
-        if (CollectionUtils.isEmpty(dataList)) {
-            return Collections.emptyList();
-        }
-        List<T> distinctData = new ArrayList<>(dataList.stream()
-                .filter(Objects::nonNull)
-                .filter(data -> keyExtractor.apply(data) != null)
-                .collect(Collectors.toMap(keyExtractor, Function.identity(),
-                        (oldValue, newValue) -> newValue, LinkedHashMap::new))
-                .values());
-        if (distinctData.size() < dataList.size()) {
-            log.warn("discarded duplicate or invalid sync records, sourceCount:{}, distinctCount:{}",
-                    dataList.size(), distinctData.size());
-        }
-        return distinctData;
-    }
-
-    /**
-     * 按对象自身 equals 语义去重。
-     *
-     * @param dataList 原始数据列表
-     * @param <T>      数据类型
-     * @return 去重后的数据列表
-     */
-    private <T> List<T> distinctList(List<T> dataList) {
-        return dataList.stream().distinct().toList();
-    }
-
-    /**
-     * 校验卡片基础数据必要字段。
-     *
-     * @param cardPOS 卡片持久化数据
-     */
-    private void checkParam(List<CardPO> cardPOS) {
-        cardPOS.forEach(card -> {
-            if (StringUtils.isAnyBlank(card.getTitle(), card.getCardName()) || !ObjectUtils.allNotNull(
-                    card.getCardId(), card.getHpValue(), card.getAtkValue(), card.getDefValue())) {
-                log.error("param error,card:{}", JsonUtils.object2Json(card));
+            if (changed && !linkRepository.updateById(old)) {
                 throw new DokkanBizException(ExceptionErrorCode.INSERT_PARAM_ERROR);
             }
-        });
+        }
     }
 
     /**
-     * 修复数据库数据。
-     *
-     * @param fixType 修复类型
-     */
-    public void fixDbData(Integer fixType) {
-        FixDataStrategy fixDataStrategy = fixDataStrategyFactory.getFixDataStrategy(fixType);
-        if (Objects.isNull(fixDataStrategy)) {
-            log.error("fixDataStrategy is null,fixType:{}", fixType);
-            throw new DokkanBizException(ExceptionErrorCode.HAS_NO_STRATEGY);
+     * 全量 ES 重建按批读取子表，不再全表加载旧 eza/special/skill。
+     **/
+    public void syncEsCardData() {
+        recreateCardIndex();
+        List<CardPO> cards = cardRepository.list();
+        int done = 0;
+        for (List<CardPO> batch : Lists.partition(cards, CardSyncConstants.CARD_SAVE_BATCH_SIZE)) {
+            List<CardEsPO> documents = esCardSyncHelper.buildEsCards(batch);
+            esCardRepository.saveDocuments(documents);
+            done += batch.size();
+            SyncProgressContext.update(CardSyncConstants.SYNC_PROGRESS_ES_READ_COMPLETE,
+                    CardSyncConstants.STAGE_WRITE_ES, CardSyncConstants.MESSAGE_SYNCED_PREFIX + done);
         }
-        fixDataStrategy.fixData();
     }
+
+    /**
+     * 按 ID 构建并写入完整 ES 文档，所有写入结果都必须成功。
+     **/
+    public int syncEsCardsByCardIds(List<Long> cardIds) {
+        int count = 0;
+        if (!esCardMapper.existsIndex(DokkanEsCardMapper.INDEX_NAME) && !esCardMapper.createIndex()) {
+            throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
+        }
+        for (List<Long> batch : Lists.partition(cardIds, CardSyncConstants.CARD_SAVE_BATCH_SIZE)) {
+            List<CardEsPO> documents = esCardSyncHelper.buildEsCards(cardRepository.batchQueryByCardIds(batch));
+            if (documents.isEmpty()) {
+                continue;
+            }
+            esCardRepository.saveDocuments(documents);
+            count += documents.size();
+        }
+        return count;
+    }
+
+    /**
+     * 人工标签事务提交后刷新 ES；ES 失败对外报错但保留已提交标签，可重复请求恢复。
+     **/
+    public int batchUpdateTags(CardTagBatchRequest request) {
+        List<Long> ids = validateCardIds(request.getCardIds(), CardSyncConstants.CARD_TAG_BATCH_MAX_COUNT);
+        Integer updated = transactionTemplate.execute(status -> cardRepository.updateTags(ids, request));
+        syncEsCardsByCardIds(ids);
+        return Objects.requireNonNull(updated);
+    }
+
+    /**
+     * 统一校验正整数卡片 ID，按去重后数量限制。
+     **/
+    private List<Long> validateCardIds(List<Long> ids, int limit) {
+        if (!areValidCardIds(ids)) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
+        List<Long> distinct = ids.stream().distinct().toList();
+        if (distinct.size() > limit) {
+            throw new DokkanBizException(ExceptionErrorCode.QUERY_PARAM_ERROR);
+        }
+        return distinct;
+    }
+
+    /**
+     * 非强制同步时，已有卡片的源哈希相同则跳过 MySQL 写入。
+     **/
+    private boolean shouldSkipCardWrite(boolean force, CardPO existing, CardPO incoming) {
+        if (force) {
+            return false;
+        } else if (existing == null) {
+            return false;
+        } else {
+            return Objects.equals(existing.getSourceHash(), incoming.getSourceHash());
+        }
+    }
+
+    /**
+     * 字典同步仅在现有链接名称为空且源名称有效时补齐名称。
+     **/
+    private boolean shouldFillLinkName(boolean allowInsert, DokkanLinkPO existing, DokkanLinkPO source) {
+        if (allowInsert) {
+            return false;
+        } else if (StringUtils.isNotBlank(existing.getLinkName())) {
+            return false;
+        } else {
+            return StringUtils.isNotBlank(source.getLinkName());
+        }
+    }
+
+    /**
+     * 先删除已有索引，再创建新索引；任一步失败立即终止重建。
+     **/
+    private void recreateCardIndex() {
+        if (esCardMapper.existsIndex(DokkanEsCardMapper.INDEX_NAME)) {
+            if (!esCardMapper.deleteIndex(DokkanEsCardMapper.INDEX_NAME)) {
+                throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
+            }
+        }
+        if (!esCardMapper.createIndex()) {
+            throw new DokkanBizException(ExceptionErrorCode.CREATE_INDEX_ERROR);
+        }
+    }
+
+    /**
+     * 校验卡片 ID 集合非空，且每个 ID 都是有效正整数。
+     **/
+    private boolean areValidCardIds(List<Long> ids) {
+        if (ids == null) {
+            return false;
+        } else if (ids.isEmpty()) {
+            return false;
+        } else {
+            return ids.stream().noneMatch(id -> id == null || id <= CardSyncConstants.MIN_VALID_CARD_ID);
+        }
+    }
+
 }

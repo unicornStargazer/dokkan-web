@@ -1,48 +1,38 @@
 package com.hb.dokkan.service.job.sync.strategy.strategies;
 
-import com.hb.dokkan.common.domain.dto.data.wiki.WikiLinkDTO;
-import com.hb.dokkan.service.facade.DokkanDbFacade;
+import com.hb.dokkan.service.client.KxWikiClient;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
 import jakarta.annotation.Resource;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.util.CollectionUtils;
-
-import java.util.List;
 
 /**
- * @Description 链接信息策略
- * @Author stargazer
- * @Date 2025/11/9 14:44
+ * @Description 从 KX Wiki reference 读取链接定义
+ * @Author Codex
+ * @Date 2026/11/8
  **/
 @Component
-@Slf4j
 public class WikiLinkStrategy implements WikiInfoStrategy {
-
+    /**
+     * KX Wiki 数据访问客户端。
+     **/
     @Resource
-    private DokkanDbFacade dokkanDbFacade;
+    private KxWikiClient client;
 
     /**
-     * 是否匹配
-     *
-     * @param type
-     */
+     * 匹配链接同步任务。
+     **/
     @Override
     public boolean isMatched(WikiInfoTypeEnum type) {
-        return WikiInfoTypeEnum.LINK.equals(type);
+        return type == WikiInfoTypeEnum.LINK;
     }
 
     /**
-     * 执行策略
-     *
-     */
+     * reference 只提供一级描述，满级描述仍由卡片详情补齐。
+     **/
     @Override
     public void execute(WikiContext context) {
-        List<WikiLinkDTO> links = dokkanDbFacade.getLinks();
-        if (!CollectionUtils.isEmpty(links)) {
-            context.setLinkData(links);
-        }
+        context.setLinkData(client.listLinks());
     }
 }
