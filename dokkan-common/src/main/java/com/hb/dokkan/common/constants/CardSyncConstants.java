@@ -16,6 +16,61 @@ public final class CardSyncConstants {
      * 分页防护上限，避免上游异常导致无限扫描。
      **/
     public static final int KX_WIKI_MAX_PAGES = 200;
+
+    /**
+     * KX Wiki 挑战目录默认分组 ID。
+     **/
+    public static final int KX_WIKI_CHALLENGE_GROUP_ID = 5;
+
+    /**
+     * 挑战地图尚无有效本地敌人快照。
+     **/
+    public static final String CHALLENGE_DATA_STATUS_NONE = "none";
+
+    /**
+     * 挑战地图已保存完整有效敌人快照。
+     **/
+    public static final String CHALLENGE_DATA_STATUS_CAPTURED = "captured";
+
+    /**
+     * 挑战地图已保存源站声明的部分敌人快照。
+     **/
+    public static final String CHALLENGE_DATA_STATUS_PARTIAL = "partial";
+
+    /**
+     * 源站尚未采集挑战地图敌人详情。
+     **/
+    public static final String CHALLENGE_CAPTURE_STATUS_NOT_CAPTURED = "not_captured";
+
+    /**
+     * 挑战地图最近一次同步成功。
+     **/
+    public static final String CHALLENGE_MAP_SYNC_STATUS_SUCCESS = "success";
+
+    /**
+     * 挑战地图最近一次同步失败。
+     **/
+    public static final String CHALLENGE_MAP_SYNC_STATUS_FAILED = "failed";
+
+    /**
+     * KX Wiki 挑战活动目录路径。
+     **/
+    public static final String KX_WIKI_EVENTS_PATH = "/api/vanilla-events";
+
+    /**
+     * KX Wiki 挑战活动详情路径模板。
+     **/
+    public static final String KX_WIKI_EVENT_DETAIL_PATH = "/api/vanilla-events/events/%d";
+
+    /**
+     * KX Wiki 挑战难度地图详情路径模板。
+     **/
+    public static final String KX_WIKI_MAP_DETAIL_PATH = "/api/vanilla-events/maps/%d";
+
+    /**
+     * KX Wiki 活动目录分组查询参数名。
+     **/
+    public static final String KX_WIKI_GROUP_PARAM = "group";
     /**
      * 卡片分页数组字段。
      **/
@@ -341,6 +396,11 @@ public final class CardSyncConstants {
     public static final String SYNC_TYPE_MANUAL = "manual";
 
     /**
+     * 异步挑战活动与副本敌人数据同步类型。
+     **/
+    public static final String SYNC_TYPE_CHALLENGE = "challenge";
+
+    /**
      * 同步任务状态：等待执行。
      **/
     public static final String SYNC_STATUS_PENDING = "PENDING";
@@ -363,7 +423,7 @@ public final class CardSyncConstants {
     /**
      * 同步类型错误提示。
      **/
-    public static final String SYNC_TYPE_ERROR_MESSAGE = "sync type must be mysql, es or manual";
+    public static final String SYNC_TYPE_ERROR_MESSAGE = "sync type must be mysql, es, manual or challenge";
 
     /**
      * 手动同步参数错误提示。

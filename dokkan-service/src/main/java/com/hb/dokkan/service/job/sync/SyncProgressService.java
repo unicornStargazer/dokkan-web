@@ -3,8 +3,10 @@ package com.hb.dokkan.service.job.sync;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.domain.request.data.SyncStartRequest;
 import com.hb.dokkan.common.domain.response.data.SyncProgressResponse;
+import com.hb.dokkan.common.domain.response.challenges.ChallengeSyncResult;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
 import com.hb.dokkan.config.thread.DokkanThreadPoolExecutor;
+import com.hb.dokkan.service.challenges.ChallengeSyncService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -40,6 +42,12 @@ public class SyncProgressService {
      **/
     @Resource
     private DokkanThreadPoolExecutor executor;
+
+    /**
+     * 活动挑战目录与敌人快照同步服务。
+     **/
+    @Resource
+    private ChallengeSyncService challengeSyncService;
 
     /**
      * 创建并启动异步同步任务。
@@ -96,6 +104,8 @@ public class SyncProgressService {
                 runMysqlSync(progress, force);
             } else if (CardSyncConstants.SYNC_TYPE_ES.equals(type)) {
                 runEsSync(progress);
+            } else if (CardSyncConstants.SYNC_TYPE_CHALLENGE.equals(type)) {
+                runChallengeSync(progress, force);
             } else {
                 runManualSync(progress, ids);
             }
@@ -105,6 +115,9 @@ public class SyncProgressService {
             log.info("[sync-job:{}] completed, type={}, current={}/{}",
                     jobId, type, progress.getCurrent(), progress.getTotal());
         } catch (Exception e) {
+            if (e instanceof ChallengeSyncService.ChallengeSyncException challengeException) {
+                applyChallengeResult(progress, challengeException.getResult());
+            }
             progress.setStatus(CardSyncConstants.SYNC_STATUS_FAILED);
             progress.setStage(CardSyncConstants.STAGE_SYNC_FAILED);
             progress.setError(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
@@ -141,6 +154,43 @@ public class SyncProgressService {
         syncDataService.syncEsCardData();
         update(progress, CardSyncConstants.SYNC_PROGRESS_ES_WRITE, CardSyncConstants.STAGE_WRITE_ES,
                 CardSyncConstants.MESSAGE_ES_SUBMITTING);
+    }
+
+    /**
+     * 执行全量挑战活动目录和地图敌人快照同步。
+     *
+     * @param progress 进度快照
+     * @param force 是否强制重抓
+     */
+    private void runChallengeSync(SyncProgressResponse progress, boolean force) {
+        update(progress, CardSyncConstants.SYNC_PROGRESS_FETCH_START, CardSyncConstants.STAGE_FETCH_EXTERNAL,
+                "正在扫描活动挑战目录");
+        ChallengeSyncResult result = challengeSyncService.sync(force);
+        applyChallengeResult(progress, result);
+        update(progress, CardSyncConstants.SYNC_PROGRESS_FINAL_CHECK, CardSyncConstants.STAGE_FINAL_CHECK,
+                "活动挑战同步完成");
+    }
+
+    /**
+     * 将挑战同步统计写入供管理端轮询的快照。
+     *
+     * @param progress 同步进度快照
+     * @param result 挑战同步结果
+     */
+    private void applyChallengeResult(SyncProgressResponse progress, ChallengeSyncResult result) {
+        if (result == null) {
+            return;
+        }
+        progress.setEventProcessed(result.getEventProcessed());
+        progress.setEventTotal(result.getEventTotal());
+        progress.setMapProcessed(result.getCapturedCount() + result.getPartialCount()
+                + result.getNotCapturedCount() + result.getFailedCount());
+        progress.setMapTotal(result.getMapTotal());
+        progress.setCapturedCount(result.getCapturedCount());
+        progress.setPartialCount(result.getPartialCount());
+        progress.setNotCapturedCount(result.getNotCapturedCount());
+        progress.setFailedCount(result.getFailedCount());
+        progress.setUnchangedCount(result.getUnchangedCount());
     }
 
     /**
@@ -239,8 +289,10 @@ public class SyncProgressService {
             return true;
         } else if (CardSyncConstants.SYNC_TYPE_ES.equals(type)) {
             return true;
+        } else if (CardSyncConstants.SYNC_TYPE_MANUAL.equals(type)) {
+            return true;
         } else {
-            return CardSyncConstants.SYNC_TYPE_MANUAL.equals(type);
+            return CardSyncConstants.SYNC_TYPE_CHALLENGE.equals(type);
         }
     }
 

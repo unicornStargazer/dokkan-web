@@ -113,6 +113,45 @@ public class KxWikiClient {
     }
 
     /**
+     * 获取指定页的挑战活动目录原始结构；源请求或 JSON 解析失败时抛业务异常。
+     *
+     * @param page 源站页码
+     * @return 挑战目录页
+     */
+    public Map<String, Object> listChallengeEvents(int page) {
+        String raw = request(CardSyncConstants.KX_WIKI_EVENTS_PATH, page, properties.getLang(),
+                CardSyncConstants.KX_WIKI_GROUP_PARAM, CardSyncConstants.KX_WIKI_CHALLENGE_GROUP_ID)
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        return parseMap(raw, CardSyncConstants.KX_WIKI_EVENTS_PATH);
+    }
+
+    /**
+     * 获取挑战活动的关卡与难度目录。
+     *
+     * @param eventId 源活动 ID
+     * @return 活动详情原始结构
+     */
+    public Map<String, Object> getChallengeEvent(long eventId) {
+        String path = String.format(CardSyncConstants.KX_WIKI_EVENT_DETAIL_PATH, eventId);
+        String raw = request(path, null, properties.getLang())
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        return parseMap(raw, path);
+    }
+
+    /**
+     * 获取一张难度地图的敌人战斗树；源请求或 JSON 解析失败时抛业务异常。
+     *
+     * @param mapId 源难度地图 ID
+     * @return 地图详情原始结构
+     */
+    public Map<String, Object> getChallengeMap(long mapId) {
+        String path = String.format(CardSyncConstants.KX_WIKI_MAP_DETAIL_PATH, mapId);
+        String raw = request(path, null, properties.getLang())
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        return parseMap(raw, path);
+    }
+
+    /**
      * 按语言读取全部分类；失败抛业务异常，已有中文名由持久化层保护。
      **/
     public List<KxWikiReferenceItemDTO> listCategories(String language) {
@@ -196,9 +235,44 @@ public class KxWikiClient {
     }
 
     /**
+     * 解析挑战接口 JSON 对象，拒绝把格式错误响应当成空对象。
+     *
+     * @param raw 原始 JSON
+     * @param path 接口路径，供日志定位
+     * @return JSON 字段映射
+     */
+    private Map<String, Object> parseMap(String raw, String path) {
+        try {
+            Map<String, Object> values = JsonUtils.json2Map(raw, String.class, Object.class);
+            if (values == null || values.isEmpty()) {
+                throw new IllegalArgumentException("Empty object response");
+            }
+            return values;
+        } catch (RuntimeException exception) {
+            log.error("KX Wiki challenge response parse failed, path={}", path, exception);
+            throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR, exception);
+        }
+    }
+
+    /**
      * 每次尝试都取得共享许可，仅对 429、5xx、超时和网络异常进行退避重试。
      **/
     private Optional<String> request(String path, Integer page, String language) {
+        return request(path, page, language, null, null);
+    }
+
+    /**
+     * 发起带一个额外查询参数的 KX Wiki 请求，仍使用共享限流与重试策略。
+     *
+     * @param path 请求路径
+     * @param page 可选页码
+     * @param language 请求语言
+     * @param parameterName 额外查询参数名
+     * @param parameterValue 额外查询参数值
+     * @return 简体化后的 JSON 文本
+     */
+    private Optional<String> request(String path, Integer page, String language,
+                                     String parameterName, Object parameterValue) {
         for (int attempt = 0; attempt <= properties.getRetryTimes(); attempt++) {
             try {
                 rateLimiter.acquire();
@@ -207,6 +281,9 @@ public class KxWikiClient {
                             .queryParam(CardSyncConstants.KX_WIKI_LANGUAGE_PARAM, language);
                     if (page != null) {
                         builder.queryParam(CardSyncConstants.KX_WIKI_PAGE_PARAM, page);
+                    }
+                    if (parameterName != null && parameterValue != null) {
+                        builder.queryParam(parameterName, parameterValue);
                     }
                     return builder.build();
                 }).retrieve().bodyToMono(String.class).timeout(Duration.ofMillis(properties.getTimeoutMills())).block();

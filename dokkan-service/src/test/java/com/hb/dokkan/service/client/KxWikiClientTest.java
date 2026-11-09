@@ -124,6 +124,49 @@ public class KxWikiClientTest {
     }
 
     /**
+     * 挑战接口使用源站 group 参数筛选目录，并返回活动及地图原始层级。
+     */
+    @Test
+    public void shouldRequestChallengeCatalogEventAndMap() throws Exception {
+        List<String> requests = new ArrayList<>();
+        HttpServer server = server();
+        server.createContext("/", exchange -> {
+            requests.add(exchange.getRequestURI().toString());
+            String path = exchange.getRequestURI().getPath();
+            String response;
+            if ("/api/vanilla-events".equals(path)) {
+                response = "{\"events\":[{\"id\":1705,\"group\":5}],\"next\":null}";
+            } else if ("/api/vanilla-events/events/1705".equals(path)) {
+                response = "{\"event\":{\"id\":1705,\"stages\":[{\"id\":1,\"maps\":[{\"id\":2}]}]}}";
+            } else {
+                response = "{\"event_id\":1705,\"map\":{\"id\":2},\"battles\":[]}";
+            }
+            byte[] body = response.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            try (var output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        server.start();
+        try {
+            KxWikiClient client = client(server, 100D, 0);
+            java.util.Map<String, Object> catalog = client.listChallengeEvents(3);
+            List<?> events = (List<?>) catalog.get("events");
+            assertEquals(5, ((Number) ((java.util.Map<?, ?>) events.getFirst()).get("group")).intValue());
+            java.util.Map<?, ?> event = (java.util.Map<?, ?>) client.getChallengeEvent(1705).get("event");
+            assertEquals(1, ((List<?>) event.get("stages")).size());
+            assertEquals(1705L, ((Number) client.getChallengeMap(2).get("event_id")).longValue());
+            assertTrue(requests.getFirst().contains("group=5"));
+            assertTrue(requests.getFirst().contains("page=3"));
+            assertTrue(requests.get(1).contains("/events/1705"));
+            assertTrue(requests.get(2).contains("/maps/2"));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /**
      * 创建随机本地端口的 mock 服务，避免依赖固定端口或外部网络。
      **/
     private HttpServer server() throws Exception {

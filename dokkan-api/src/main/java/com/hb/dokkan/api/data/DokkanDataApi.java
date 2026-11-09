@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * @Description card服务
+ * @Description 数据同步服务
  * @Author stargazer
  * @Date 2025/6/2 21:38
  **/

@@ -120,6 +120,7 @@ public class DokkanDataDelegate {
         return DokkanResponse.<SyncProgressResponse>builder().withModel(progress).success();
     }
 
+
     /**
      * 依次判空请求及卡片集合，避免空请求触发字段访问。
      **/

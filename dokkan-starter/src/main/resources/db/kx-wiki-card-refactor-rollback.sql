@@ -2,5 +2,6 @@
 RENAME TABLE card TO card_kx_rollback, card_state TO card_state_kx_rollback,
     card_skill TO card_skill_kx_rollback, card_category_rel TO card_category_rel_kx_rollback,
     card_link_rel TO card_link_rel_kx_rollback,
+    kx_wiki_sync_checkpoint TO kx_wiki_sync_checkpoint_kx_rollback,
     card_legacy TO card, eza_card_legacy TO eza_card, special_legacy TO special,
     skill_legacy TO skill, translation_mapping_legacy TO translation_mapping;
