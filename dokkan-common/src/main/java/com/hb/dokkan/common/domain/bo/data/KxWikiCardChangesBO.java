@@ -1,6 +1,9 @@
 package com.hb.dokkan.common.domain.bo.data;
 
 import lombok.Data;
+import com.hb.dokkan.common.domain.dto.data.kx.KxWikiCardChangeDTO;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -12,9 +15,13 @@ import java.util.Set;
 @Data
 public class KxWikiCardChangesBO {
     /**
-     * 两个更新入口合并去重后的卡片 ID，仍受自动同步目录规则约束。
+     * 两个更新入口合并去重后的更新 ID，仍受稀有度和黑名单规则约束。
      **/
     private Set<Long> cardIds = new LinkedHashSet<>();
+    /**
+     * 当前 DDL 批次完整的卡片信号；未发布卡无需先出现在目录，已确认批次仍用来补录缺卡。
+     **/
+    private Map<Long, KxWikiCardChangeDTO> ddlCards = new LinkedHashMap<>();
     /**
      * 本轮国际服最新批次指纹；其他地区不使用该入口，为空。
      **/

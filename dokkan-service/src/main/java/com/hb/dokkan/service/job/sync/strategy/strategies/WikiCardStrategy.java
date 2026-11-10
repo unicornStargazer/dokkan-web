@@ -105,16 +105,20 @@ public class WikiCardStrategy implements WikiInfoStrategy {
         // 全量抓取保留独立入口；增量先检查更新信号，防止 status 不变时漏掉开放记录。
         KxWikiCardChangesBO changes = context.isForce() ? new KxWikiCardChangesBO() : changeService.scan(syncKey);
         context.setCardChanges(changes);
-        if (!changes.isChanged() && shouldSkipUnchangedVersion(context.isForce(), updatedAt, syncKey)) {
+        Map<Long, CardPO> existing = context.isForce() ? Map.of() : cardRepository.listSyncFlags().stream()
+                .collect(Collectors.toMap(CardPO::getCardId, Function.identity()));
+        Set<Long> ddlCandidates = readDdlCandidates(changes, existing);
+        if (canSkipVersion(context.isForce(), updatedAt, syncKey, changes, ddlCandidates)) {
             return;
         }
         context.setSourceUpdatedAt(updatedAt);
         List<KxWikiCardListItemDTO> catalog = readCatalog();
-        Map<Long, CardPO> existing = context.isForce() ? Map.of() : cardRepository.listSyncFlags().stream()
-                .collect(Collectors.toMap(CardPO::getCardId, Function.identity()));
-        List<Long> candidates = catalog.stream()
+        Set<Long> candidateIds = catalog.stream()
                 .filter(item -> shouldFetchCard(context.isForce(), changes, item, existing.get(item.getId())))
-                .map(KxWikiCardListItemDTO::getId).distinct().toList();
+                .map(KxWikiCardListItemDTO::getId).collect(Collectors.toCollection(LinkedHashSet::new));
+        // DDL 中的未发布卡不在已开放目录里，直接按 ID 走同一套完整详情和写入链路。
+        candidateIds.addAll(ddlCandidates);
+        List<Long> candidates = new ArrayList<>(candidateIds);
         for (int index = 0; index < candidates.size(); index++) {
             Long cardId = candidates.get(index);
             pendingCardIds.add(cardId);
@@ -132,7 +136,53 @@ public class WikiCardStrategy implements WikiInfoStrategy {
     }
 
     /**
-     * 强制模式、外部更新信号和目录标记依次判断；最终仍遵守 UR/LR 和黑名单范围。
+     * DDL 候选独立按稀有度和黑名单筛选，新批次、缺失记录或待重试时直接抓取。
+     **/
+    private Set<Long> readDdlCandidates(KxWikiCardChangesBO changes, Map<Long, CardPO> existing) {
+        Set<Long> blacklist = new HashSet<>(cardFilter.getWikiCardBlackList());
+        Set<Long> candidates = new LinkedHashSet<>();
+        for (KxWikiCardChangeDTO card : changes.getDdlCards().values()) {
+            if (!isIncludedInAutomaticSync(card.getId(), card.getRarity(), blacklist)) {
+                continue;
+            }
+            if (shouldFetchDdlCard(card.getId(), changes, existing.get(card.getId()))) {
+                candidates.add(card.getId());
+            }
+        }
+        return candidates;
+    }
+
+    /**
+     * 已确认批次仍补录本地缺失卡片，避免旧版目录过滤造成永久遗漏。
+     **/
+    private boolean shouldFetchDdlCard(Long cardId, KxWikiCardChangesBO changes, CardPO existing) {
+        if (changes.getCardIds().contains(cardId)) {
+            return true;
+        } else if (existing == null) {
+            return true;
+        } else if (existing.getSourceHash() == null) {
+            return true;
+        } else {
+            return pendingCardIds.contains(cardId);
+        }
+    }
+
+    /**
+     * 新批次、时间线变化或 DDL 缺卡均不能被相同 status 版本短路。
+     **/
+    private boolean canSkipVersion(boolean force, String updatedAt, String syncKey,
+                                   KxWikiCardChangesBO changes, Set<Long> ddlCandidates) {
+        if (changes.isChanged()) {
+            return false;
+        } else if (!ddlCandidates.isEmpty()) {
+            return false;
+        } else {
+            return shouldSkipUnchangedVersion(force, updatedAt, syncKey);
+        }
+    }
+
+    /**
+     * 目录内卡片按强制模式、外部更新信号和本地标记依次判断。
      **/
     private boolean shouldFetchCard(boolean force, KxWikiCardChangesBO changes, KxWikiCardListItemDTO item, CardPO existing) {
         if (force) {
@@ -243,14 +293,21 @@ public class WikiCardStrategy implements WikiInfoStrategy {
      * 按 ID、稀有度和黑名单逐项筛选自动同步范围，保持原有短路顺序。
      **/
     private boolean isIncludedInAutomaticSync(KxWikiCardListItemDTO item, Set<Long> blacklist) {
-        if (item.getId() == null) {
+        return isIncludedInAutomaticSync(item.getId(), item.getRarity(), blacklist);
+    }
+
+    /**
+     * 目录与 DDL 共用自动同步范围，未发布不影响卡片的合法身份和稀有度。
+     **/
+    private boolean isIncludedInAutomaticSync(Long cardId, Integer rarity, Set<Long> blacklist) {
+        if (cardId == null) {
             return false;
-        } else if (item.getRarity() == null) {
+        } else if (rarity == null) {
             return false;
-        } else if (item.getRarity() < CardSyncConstants.LIMITED_RULE_UR_RARITY) {
+        } else if (rarity < CardSyncConstants.LIMITED_RULE_UR_RARITY) {
             return false;
         } else {
-            return !blacklist.contains(item.getId());
+            return !blacklist.contains(cardId);
         }
     }
 }

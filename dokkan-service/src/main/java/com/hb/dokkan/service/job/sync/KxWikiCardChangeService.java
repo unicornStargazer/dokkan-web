@@ -57,6 +57,9 @@ public class KxWikiCardChangeService {
         if (CardSyncConstants.KX_WIKI_DEFAULT_REGION.equals(properties.getRegion())) {
             KxWikiLatestDdlDTO latest = client.getLatestDdl();
             changes.setDdlFingerprint(latest.getFingerprint());
+            // 每轮保留批次卡片元数据，修复旧版已确认指纹但未导入未发布卡的情况。
+            addDdlCards(changes, latest.getNewUnits());
+            addDdlCards(changes, latest.getNewEzas());
             String previous = repository.findLastUpdatedAt(syncKey + CardSyncConstants.KX_WIKI_DDL_CHECKPOINT_SUFFIX);
             if (!Objects.equals(previous, latest.getFingerprint())) {
                 changes.setChanged(true);
@@ -66,6 +69,18 @@ public class KxWikiCardChangeService {
         }
         scanTimeline(syncKey, changes);
         return changes;
+    }
+
+    /**
+     * 保存可独立于目录筛选的 DDL 候选；身份缺失时阻止不完整批次被确认。
+     **/
+    private void addDdlCards(KxWikiCardChangesBO changes, List<KxWikiCardChangeDTO> items) {
+        for (KxWikiCardChangeDTO item : items) {
+            if (item == null || item.getId() == null) {
+                throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
+            }
+            changes.getDdlCards().put(item.getId(), item);
+        }
     }
 
     /**

@@ -19,6 +19,10 @@ public class KxWikiCardChangeDTO {
      **/
     private Long id;
     /**
+     * 源站稀有度编码，DDL 候选可独立于已发布目录按 UR/LR 范围筛选。
+     **/
+    private Integer rarity;
+    /**
      * 开放类型，源站使用 unit、eza 或 seza。
      **/
     private String releaseKind;

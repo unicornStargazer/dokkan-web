@@ -125,12 +125,16 @@ public class KxWikiCardChangeServiceTest {
     }
 
     /**
-     * 指纹变化打破 status 短路，但候选继续遵守稀有度、黑名单和目录存在性约束。
+     * DDL 未发布卡可独立于目录导入，同时仍按稀有度、黑名单筛选并与目录去重。
      **/
     @Test
     public void shouldRefreshSignaledExistingCardsWithinAutomaticScope() throws Exception {
         Fixture fixture = new Fixture();
-        fixture.latest.setNewUnits(List.of(card(1L), card(1L), card(3L), card(4L), card(99L)));
+        KxWikiCardChangeDTO lowRarity = card(4L);
+        lowRarity.setRarity(3);
+        KxWikiCardChangeDTO unreleased = card(99L);
+        unreleased.setReleaseAt(Long.MAX_VALUE);
+        fixture.latest.setNewUnits(List.of(card(1L), card(1L), card(3L), lowRarity, unreleased));
         fixture.pages.put(1, timeline(1, group("2026-11-10", 2L)));
         WikiCardStrategy strategy = fixture.strategy(List.of(1L, 2L, 3L, 4L), List.of(3L));
         WikiContext context = new WikiContext();
@@ -140,7 +144,7 @@ public class KxWikiCardChangeServiceTest {
             processed.add(id);
             strategy.markCardComplete(id);
         });
-        assertEquals(List.of(1L, 2L), processed);
+        assertEquals(List.of(1L, 2L, 99L), processed);
         strategy.markVersionComplete(context);
         assertEquals("batch-1", fixture.saved.get(fixture.scope() + CardSyncConstants.KX_WIKI_DDL_CHECKPOINT_SUFFIX));
     }
@@ -153,7 +157,7 @@ public class KxWikiCardChangeServiceTest {
         Fixture fixture = new Fixture();
         fixture.latest.setNewEzas(List.of(card(1L)));
         fixture.pages.put(1, timeline(1, group("2026-11-10", 2L)));
-        WikiCardStrategy strategy = fixture.strategy(List.of(1L, 2L), List.of());
+        WikiCardStrategy strategy = fixture.strategy(List.of(2L), List.of());
         WikiContext failed = new WikiContext();
         strategy.execute(failed, aggregate -> {
             Long id = aggregate.getCards().getFirst().getCardId();
@@ -165,11 +169,47 @@ public class KxWikiCardChangeServiceTest {
         strategy.markVersionComplete(failed);
         assertEquals(List.of(1L), failed.getFailedCardIds());
         assertEquals(Map.of(fixture.scope(), "same-version"), fixture.saved);
-        WikiCardStrategy restarted = fixture.strategy(List.of(1L, 2L), List.of());
+        WikiCardStrategy restarted = fixture.strategy(List.of(2L), List.of());
         WikiContext successful = new WikiContext();
         restarted.execute(successful, aggregate -> restarted.markCardComplete(aggregate.getCards().getFirst().getCardId()));
         restarted.markVersionComplete(successful);
         assertNotNull(fixture.saved.get(fixture.scope() + CardSyncConstants.KX_WIKI_TIMELINE_CHECKPOINT_SUFFIX));
+    }
+
+    /**
+     * 旧版已确认同一批次和 status，但未发布卡未入库时仍须补录，不能继续短路。
+     **/
+    @Test
+    public void shouldRecoverMissingDdlCardEvenWhenAllCheckpointsAreUnchanged() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.latest.setNewUnits(List.of(card(99L)));
+        fixture.pages.put(1, timeline(1, group("2026-11-10", 2L)));
+        fixture.confirm(fixture.service().scan(fixture.scope()));
+        WikiCardStrategy strategy = fixture.strategy(List.of(2L), List.of());
+        WikiContext context = new WikiContext();
+        List<Long> processed = new ArrayList<>();
+        strategy.execute(context, aggregate -> {
+            Long id = aggregate.getCards().getFirst().getCardId();
+            processed.add(id);
+            strategy.markCardComplete(id);
+        });
+        assertFalse(context.getCardChanges().isChanged());
+        assertEquals(List.of(99L), processed);
+    }
+
+    /**
+     * 同一批次卡片已在本地完整保存时不再重复抓取，包括未出现在目录的卡片。
+     **/
+    @Test
+    public void shouldSkipUnchangedBatchWhenDdlCardAlreadyExists() throws Exception {
+        Fixture fixture = new Fixture();
+        fixture.latest.setNewUnits(List.of(card(99L)));
+        fixture.pages.put(1, timeline(1, group("2026-11-10", 2L)));
+        fixture.confirm(fixture.service().scan(fixture.scope()));
+        WikiCardStrategy strategy = fixture.strategy(List.of(2L, 99L), List.of());
+        WikiContext context = new WikiContext();
+        strategy.execute(context, aggregate -> fail("Unchanged complete DDL card must not be fetched again"));
+        assertNull(context.getSourceUpdatedAt());
     }
 
     /**
@@ -204,6 +244,7 @@ public class KxWikiCardChangeServiceTest {
     private static KxWikiCardChangeDTO card(Long id) {
         KxWikiCardChangeDTO item = new KxWikiCardChangeDTO();
         item.setId(id);
+        item.setRarity(4);
         return item;
     }
 

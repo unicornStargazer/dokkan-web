@@ -5,6 +5,9 @@ import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.domain.bo.data.KxWikiCardChangesBO;
 import com.hb.dokkan.config.kx.KxWikiProperties;
+import com.hb.dokkan.config.data.WikiCardFilter;
+import com.hb.dokkan.infrastructure.mysql.cards.DokkanCardRepository;
+import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
 import com.hb.dokkan.infrastructure.mysql.sync.KxWikiSyncRepository;
 import com.hb.dokkan.infrastructure.mysql.sync.mapper.KxWikiSyncMapper;
 import com.hb.dokkan.service.client.KxWikiClient;
@@ -186,6 +189,16 @@ public class KxWikiSyncPersistenceTest {
         WikiCardStrategy strategy = new WikiCardStrategy();
         inject(strategy, "syncRepository", repository);
         inject(strategy, "properties", new KxWikiProperties());
+        inject(strategy, "cardFilter", new WikiCardFilter());
+        inject(strategy, "cardRepository", new DokkanCardRepository() {
+            /**
+             * 当前用例没有 DDL 候选，只需空的本地同步标记快照。
+             **/
+            @Override
+            public List<CardPO> listSyncFlags() {
+                return List.of();
+            }
+        });
         inject(strategy, "changeService", new KxWikiCardChangeService(null, new KxWikiProperties(), repository) {
             /**
              * 该组测试只验证持久化版本短路，两个更新入口均保持原水位。
