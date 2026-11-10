@@ -18,6 +18,68 @@ import static org.junit.Assert.*;
  **/
 public class KxWikiClientTest {
     /**
+     * 两个更新入口使用统一请求配置，截断分组按 day 补齐，保留新卡和超极限信号。
+     **/
+    @Test
+    public void shouldReadLatestBatchAndCompleteTimelineDay() {
+        List<String> requests = new ArrayList<>();
+        KxWikiProperties properties = new KxWikiProperties();
+        properties.setPermitsPerSecond(100D);
+        WebClient webClient = WebClient.builder().baseUrl("http://localhost").exchangeFunction(request -> {
+            requests.add(request.url().toString());
+            String body;
+            if (request.url().getPath().equals("/api/ddl/latest")) {
+                body = """
+                        {"fingerprint":"batch-1","new_units":[{"id":1034871}],"new_ezas":[{"id":1013391,"release_kind":"seza"}]}
+                        """;
+            } else if (request.url().getQuery().contains("day=2026-11-10")) {
+                body = """
+                        {"available":true,"pages":1,"groups":[{"date":"2026-11-10","total":2,"truncated":false,"items":[{"id":1},{"id":2}]}]}
+                        """;
+            } else {
+                body = """
+                        {"available":true,"pages":2,"groups":[{"date":"2026-11-10","total":2,"truncated":true,"items":[{"id":1}]}]}
+                        """;
+            }
+            return reactor.core.publisher.Mono.just(org.springframework.web.reactive.function.client.ClientResponse
+                    .create(org.springframework.http.HttpStatus.OK)
+                    .header("Content-Type", "application/json").body(body).build());
+        }).build();
+        KxWikiClient client = new KxWikiClient(webClient, properties);
+        var latest = client.getLatestDdl();
+        assertEquals(Long.valueOf(1034871L), latest.getNewUnits().getFirst().getId());
+        assertEquals("seza", latest.getNewEzas().getFirst().getReleaseKind());
+        var page = client.getCardTimeline(2, null);
+        assertEquals(2, client.completeTimelineGroup(page.getGroups().getFirst()).getItems().size());
+        assertEquals(3, requests.size());
+        assertTrue(requests.get(0).contains("lang=zh"));
+        assertTrue(requests.get(1).contains("page=2"));
+        assertTrue(requests.get(1).contains("region=global"));
+        assertTrue(requests.get(2).contains("day=2026-11-10"));
+    }
+
+    /**
+     * 缺字段、声明不可用或错误的完整数量不能被当作成功空更新。
+     **/
+    @Test
+    public void shouldRejectMalformedChangeResponses() {
+        KxWikiProperties properties = new KxWikiProperties();
+        properties.setPermitsPerSecond(100D);
+        java.util.concurrent.atomic.AtomicReference<String> body = new java.util.concurrent.atomic.AtomicReference<>("{}");
+        WebClient webClient = WebClient.builder().baseUrl("http://localhost").exchangeFunction(request ->
+                reactor.core.publisher.Mono.just(org.springframework.web.reactive.function.client.ClientResponse
+                        .create(org.springframework.http.HttpStatus.OK)
+                        .header("Content-Type", "application/json").body(body.get()).build())).build();
+        KxWikiClient client = new KxWikiClient(webClient, properties);
+        assertThrows(RuntimeException.class, client::getLatestDdl);
+        body.set("{\"available\":false,\"pages\":1,\"groups\":[]}");
+        assertThrows(RuntimeException.class, () -> client.getCardTimeline(1, null));
+        body.set("""
+                {"available":true,"pages":1,"groups":[{"date":"2026-11-10","total":2,"truncated":false,"items":[{"id":1}]}]}
+                """);
+        assertThrows(RuntimeException.class, () -> client.getCardTimeline(1, null));
+    }
+    /**
      * 请求超时也受同一重试上限约束，最终返回空结果。
      **/
     @Test

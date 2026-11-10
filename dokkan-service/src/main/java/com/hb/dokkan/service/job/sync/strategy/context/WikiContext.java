@@ -1,6 +1,7 @@
 package com.hb.dokkan.service.job.sync.strategy.context;
 
 import com.hb.dokkan.common.domain.bo.data.KxWikiCardBO;
+import com.hb.dokkan.common.domain.bo.data.KxWikiCardChangesBO;
 import com.hb.dokkan.common.domain.dto.data.kx.KxWikiReferenceItemDTO;
 import lombok.Data;
 import java.util.*;
@@ -38,4 +39,8 @@ public class WikiContext {
      * 本轮源站版本水位，仅在 MySQL 和 ES 全部成功后确认。
      **/
     private String sourceUpdatedAt;
+    /**
+     * 最新批次和时间线的候选与待确认水位，整轮成功前不持久化。
+     **/
+    private KxWikiCardChangesBO cardChanges;
 }

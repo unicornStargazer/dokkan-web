@@ -3,6 +3,7 @@ package com.hb.dokkan.service.job.sync;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.hb.dokkan.common.constants.CardSyncConstants;
+import com.hb.dokkan.common.domain.bo.data.KxWikiCardChangesBO;
 import com.hb.dokkan.config.kx.KxWikiProperties;
 import com.hb.dokkan.infrastructure.mysql.sync.KxWikiSyncRepository;
 import com.hb.dokkan.infrastructure.mysql.sync.mapper.KxWikiSyncMapper;
@@ -21,6 +22,10 @@ import org.junit.rules.TemporaryFolder;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -111,11 +116,21 @@ public class KxWikiSyncPersistenceTest {
         field.setAccessible(true);
         Set<Long> pending = (Set<Long>) field.get(strategy);
         pending.add(1L);
-        strategy.markVersionComplete("new-version");
+        WikiContext context = new WikiContext();
+        context.setSourceUpdatedAt("new-version");
+        KxWikiCardChangesBO changes = new KxWikiCardChangesBO();
+        changes.setDdlFingerprint("batch-new");
+        changes.setTimelineCheckpoint("{\"date\":\"2026-11-10\",\"hash\":\"new-hash\"}");
+        context.setCardChanges(changes);
+        strategy.markVersionComplete(context);
         assertEquals("old-version", repository().findLastUpdatedAt(syncKey));
+        assertNull(repository().findLastUpdatedAt(syncKey + CardSyncConstants.KX_WIKI_DDL_CHECKPOINT_SUFFIX));
         strategy.markCardComplete(1L);
-        strategy.markVersionComplete("new-version");
+        strategy.markVersionComplete(context);
         assertEquals("new-version", repository().findLastUpdatedAt(syncKey));
+        assertEquals("batch-new", repository().findLastUpdatedAt(syncKey + CardSyncConstants.KX_WIKI_DDL_CHECKPOINT_SUFFIX));
+        assertEquals(changes.getTimelineCheckpoint(), repository().findLastUpdatedAt(
+                syncKey + CardSyncConstants.KX_WIKI_TIMELINE_CHECKPOINT_SUFFIX));
         Set<Long> restartedPending = (Set<Long>) field.get(strategy(repository()));
         assertTrue(restartedPending.isEmpty());
     }
@@ -129,6 +144,25 @@ public class KxWikiSyncPersistenceTest {
         List<String> tables = new JdbcTemplate(dataSource).queryForList(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", String.class);
         assertEquals(List.of("kx_wiki_sync_checkpoint"), tables);
+    }
+
+    /**
+     * 三个检查点通过真实 Spring 事务同时确认，末项写入失败时不能留下前两项。
+     **/
+    @Test
+    public void shouldRollbackAllCheckpointsWhenOneWriteFails() throws Exception {
+        repository().confirmVersion(syncKey, "old-version");
+        TransactionInterceptor transaction = new TransactionInterceptor();
+        transaction.setTransactionManager(new DataSourceTransactionManager(dataSource));
+        transaction.setTransactionAttributeSource(new AnnotationTransactionAttributeSource());
+        ProxyFactory proxy = new ProxyFactory(repository());
+        proxy.addAdvice(transaction);
+        KxWikiSyncRepository transactional = (KxWikiSyncRepository) proxy.getProxy();
+        assertThrows(RuntimeException.class, () -> transactional.confirmCardVersion(
+                syncKey, "new-version", "batch-new", "x".repeat(129)));
+        assertEquals("old-version", repository().findLastUpdatedAt(syncKey));
+        assertNull(repository().findLastUpdatedAt(syncKey + CardSyncConstants.KX_WIKI_DDL_CHECKPOINT_SUFFIX));
+        assertNull(repository().findLastUpdatedAt(syncKey + CardSyncConstants.KX_WIKI_TIMELINE_CHECKPOINT_SUFFIX));
     }
 
     /**
@@ -152,6 +186,15 @@ public class KxWikiSyncPersistenceTest {
         WikiCardStrategy strategy = new WikiCardStrategy();
         inject(strategy, "syncRepository", repository);
         inject(strategy, "properties", new KxWikiProperties());
+        inject(strategy, "changeService", new KxWikiCardChangeService(null, new KxWikiProperties(), repository) {
+            /**
+             * 该组测试只验证持久化版本短路，两个更新入口均保持原水位。
+             **/
+            @Override
+            public KxWikiCardChangesBO scan(String scope) {
+                return new KxWikiCardChangesBO();
+            }
+        });
         inject(strategy, "client", new KxWikiClient(WebClient.builder().build(), new KxWikiProperties()) {
             /**
              * 返回固定的整个数据源版本。

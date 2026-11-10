@@ -80,6 +80,121 @@ public class KxWikiClient {
     }
 
     /**
+     * 查询国际服最新数据库批次；请求、解析或必要字段缺失时抛错，不确认指纹。
+     *
+     * @return 包含新卡和新极限路线的批次
+     **/
+    public KxWikiLatestDdlDTO getLatestDdl() {
+        KxWikiLatestDdlDTO response = get(CardSyncConstants.KX_WIKI_LATEST_DDL_PATH, KxWikiLatestDdlDTO.class)
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        if (!isValidLatestDdl(response)) {
+            log.error("KX Wiki invalid latest batch, path={}", CardSyncConstants.KX_WIKI_LATEST_DDL_PATH);
+            throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
+        }
+        return response;
+    }
+
+    /**
+     * 逐项验证批次指纹和候选数组，禁止将不完整响应当成空批次。
+     **/
+    private boolean isValidLatestDdl(KxWikiLatestDdlDTO response) {
+        if (response.getFingerprint() == null || response.getFingerprint().isBlank()) {
+            return false;
+        } else if (response.getNewUnits() == null) {
+            return false;
+        } else {
+            return response.getNewEzas() != null;
+        }
+    }
+
+    /**
+     * 查询时间线分页或完整日期；复用共享限速、超时和重试，失败抛业务异常。
+     *
+     * @param page 查询页码
+     * @param day 可选 ISO 日期，用于补取截断分组
+     * @return 已验证可用的时间线页
+     **/
+    public KxWikiTimelineDTO getCardTimeline(int page, String day) {
+        Optional<String> raw = request(CardSyncConstants.KX_WIKI_TIMELINE_PATH, page, properties.getLang(),
+                CardSyncConstants.KX_WIKI_DAY_PARAM, day);
+        KxWikiTimelineDTO response = parse(raw, KxWikiTimelineDTO.class)
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        if (!isValidTimeline(response)) {
+            log.error("KX Wiki invalid timeline, page={}, day={}", page, day);
+            throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
+        }
+        response.getGroups().forEach(this::validateTimelineGroup);
+        return response;
+    }
+
+    /**
+     * 补取被截断的一天并校验总数，缺失或仍截断时失败，禁止漏卡后确认水位。
+     *
+     * @param group 分页中的日期分组
+     * @return 当天完整开放记录
+     **/
+    public KxWikiTimelineGroupDTO completeTimelineGroup(KxWikiTimelineGroupDTO group) {
+        validateTimelineGroup(group);
+        if (!Boolean.TRUE.equals(group.getTruncated())) {
+            return group;
+        }
+        KxWikiTimelineDTO response = getCardTimeline(1, group.getDate());
+        KxWikiTimelineGroupDTO complete = response.getGroups().stream()
+                .filter(item -> Objects.equals(item.getDate(), group.getDate())).findFirst()
+                .orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
+        if (Boolean.TRUE.equals(complete.getTruncated()) || !Objects.equals(complete.getTotal(), group.getTotal())) {
+            log.error("KX Wiki incomplete timeline day, day={}", group.getDate());
+            throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
+        }
+        return complete;
+    }
+
+    /**
+     * 校验日期与当天记录，完整分组必须与声明数量相符。
+     **/
+    private void validateTimelineGroup(KxWikiTimelineGroupDTO group) {
+        try {
+            DateUtils.parseIsoDate(group.getDate());
+            if (!isValidTimelineGroup(group)) {
+                throw new IllegalArgumentException("Incomplete timeline group");
+            }
+        } catch (RuntimeException exception) {
+            log.error("KX Wiki invalid timeline group", exception);
+            throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR, exception);
+        }
+    }
+
+    /**
+     * 分支校验数组、条目标识和完整性标记，空数组只允许 total 为零。
+     **/
+    private boolean isValidTimelineGroup(KxWikiTimelineGroupDTO group) {
+        if (group.getItems() == null || group.getTotal() == null) {
+            return false;
+        } else if (group.getTruncated() == null) {
+            return false;
+        } else if (group.getItems().stream().anyMatch(item -> item == null || item.getId() == null)) {
+            return false;
+        } else if (Boolean.TRUE.equals(group.getTruncated())) {
+            return group.getTotal() >= group.getItems().size();
+        } else {
+            return group.getTotal() == group.getItems().size();
+        }
+    }
+
+    /**
+     * 校验时间线可用状态、页数和分组，防止失败响应推进水位。
+     **/
+    private boolean isValidTimeline(KxWikiTimelineDTO response) {
+        if (!Boolean.TRUE.equals(response.getAvailable())) {
+            return false;
+        } else if (response.getPages() == null || response.getPages() < 1) {
+            return false;
+        } else {
+            return response.getGroups() != null;
+        }
+    }
+
+    /**
      * 查询卡片详情，保留原始 JSON 供内容 hash 使用；失败返回空 Optional。
      **/
     public Optional<KxWikiCardDetailDTO> getCardDetail(long cardId) {

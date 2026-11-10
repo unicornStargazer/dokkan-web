@@ -3,6 +3,7 @@ package com.hb.dokkan.service.job.sync.strategy.strategies;
 import com.hb.dokkan.common.constants.CardSyncConstants;
 import com.hb.dokkan.common.constants.ExceptionErrorCode;
 import com.hb.dokkan.common.domain.bo.data.KxWikiCardBO;
+import com.hb.dokkan.common.domain.bo.data.KxWikiCardChangesBO;
 import com.hb.dokkan.common.domain.dto.data.kx.*;
 import com.hb.dokkan.common.domain.po.mysql.cards.CardPO;
 import com.hb.dokkan.common.exception.domain.DokkanBizException;
@@ -13,6 +14,7 @@ import com.hb.dokkan.infrastructure.mysql.sync.KxWikiSyncRepository;
 import com.hb.dokkan.service.client.KxWikiClient;
 import com.hb.dokkan.service.convert.KxWikiCardConvert;
 import com.hb.dokkan.service.job.sync.SyncProgressContext;
+import com.hb.dokkan.service.job.sync.KxWikiCardChangeService;
 import com.hb.dokkan.service.job.sync.strategy.WikiInfoStrategy;
 import com.hb.dokkan.service.job.sync.strategy.context.WikiContext;
 import com.hb.dokkan.service.job.sync.strategy.enums.WikiInfoTypeEnum;
@@ -63,6 +65,11 @@ public class WikiCardStrategy implements WikiInfoStrategy {
      **/
     @Resource
     private KxWikiSyncRepository syncRepository;
+    /**
+     * 新卡、极限和超极限更新信号扫描，不受 status 版本短路影响。
+     **/
+    @Resource
+    private KxWikiCardChangeService changeService;
 
     /**
      * 单卡待重试集合，仅在当前进程中保留，不写入数据库。
@@ -78,7 +85,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
     }
 
     /**
-     * status 无变化时短路；分页失败抛错；详情失败隔离并记录卡片 ID。
+     * status、最新批次和时间线均无变化时短路；详情失败隔离并记录卡片 ID。
      **/
     @Override
     public void execute(WikiContext context) {
@@ -95,7 +102,10 @@ public class WikiCardStrategy implements WikiInfoStrategy {
         String updatedAt = client.getStatus().map(KxWikiStatusDTO::getUpdatedAt)
                 .filter(value -> !value.isBlank()).orElseThrow(() -> new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR));
         String syncKey = syncKey();
-        if (shouldSkipUnchangedVersion(context.isForce(), updatedAt, syncKey)) {
+        // 全量抓取保留独立入口；增量先检查更新信号，防止 status 不变时漏掉开放记录。
+        KxWikiCardChangesBO changes = context.isForce() ? new KxWikiCardChangesBO() : changeService.scan(syncKey);
+        context.setCardChanges(changes);
+        if (!changes.isChanged() && shouldSkipUnchangedVersion(context.isForce(), updatedAt, syncKey)) {
             return;
         }
         context.setSourceUpdatedAt(updatedAt);
@@ -103,7 +113,7 @@ public class WikiCardStrategy implements WikiInfoStrategy {
         Map<Long, CardPO> existing = context.isForce() ? Map.of() : cardRepository.listSyncFlags().stream()
                 .collect(Collectors.toMap(CardPO::getCardId, Function.identity()));
         List<Long> candidates = catalog.stream()
-                .filter(item -> context.isForce() || isCandidate(item, existing.get(item.getId())))
+                .filter(item -> shouldFetchCard(context.isForce(), changes, item, existing.get(item.getId())))
                 .map(KxWikiCardListItemDTO::getId).distinct().toList();
         for (int index = 0; index < candidates.size(); index++) {
             Long cardId = candidates.get(index);
@@ -118,6 +128,19 @@ public class WikiCardStrategy implements WikiInfoStrategy {
                             + (index + 1) * CardSyncConstants.SYNC_PROGRESS_EXTERNAL_SPAN / Math.max(candidates.size(), 1),
                     CardSyncConstants.STAGE_FETCH_EXTERNAL,
                     CardSyncConstants.MESSAGE_KX_FETCH_PROGRESS + (index + 1) + CardSyncConstants.PATH_SEPARATOR + candidates.size());
+        }
+    }
+
+    /**
+     * 强制模式、外部更新信号和目录标记依次判断；最终仍遵守 UR/LR 和黑名单范围。
+     **/
+    private boolean shouldFetchCard(boolean force, KxWikiCardChangesBO changes, KxWikiCardListItemDTO item, CardPO existing) {
+        if (force) {
+            return true;
+        } else if (changes.getCardIds().contains(item.getId())) {
+            return true;
+        } else {
+            return isCandidate(item, existing);
         }
     }
 
@@ -162,9 +185,15 @@ public class WikiCardStrategy implements WikiInfoStrategy {
     /**
      * 仅在本轮没有待重试卡片时，持久化整个数据源的成功更新时间。
      **/
-    public void markVersionComplete(String updatedAt) {
-        if (pendingCardIds.isEmpty() && updatedAt != null) {
-            syncRepository.confirmVersion(syncKey(), updatedAt);
+    public void markVersionComplete(WikiContext context) {
+        if (!context.getFailedCardIds().isEmpty()) {
+            return;
+        }
+        if (pendingCardIds.isEmpty() && context.getSourceUpdatedAt() != null) {
+            KxWikiCardChangesBO changes = context.getCardChanges();
+            syncRepository.confirmCardVersion(syncKey(), context.getSourceUpdatedAt(),
+                    changes == null ? null : changes.getDdlFingerprint(),
+                    changes == null ? null : changes.getTimelineCheckpoint());
         }
     }
 

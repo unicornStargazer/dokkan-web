@@ -6,6 +6,26 @@ package com.hb.dokkan.common.constants;
  * @Date 2026/8/15 21:10
  **/
 public final class CardSyncConstants {
+    /**
+     * 国际服游戏数据库最新批次接口，不作为其他地区的更新依据。
+     **/
+    public static final String KX_WIKI_LATEST_DDL_PATH = "/api/ddl/latest";
+    /**
+     * 卡片新卡、极限与超极限开放时间线接口。
+     **/
+    public static final String KX_WIKI_TIMELINE_PATH = "/api/wiki/timeline";
+    /**
+     * 时间线按日期查询参数，用于补取截断列表。
+     **/
+    public static final String KX_WIKI_DAY_PARAM = "day";
+    /**
+     * 复用同步状态表保存最新批次指纹的范围后缀。
+     **/
+    public static final String KX_WIKI_DDL_CHECKPOINT_SUFFIX = ":ddl";
+    /**
+     * 复用同步状态表保存时间线成功水位的范围后缀。
+     **/
+    public static final String KX_WIKI_TIMELINE_CHECKPOINT_SUFFIX = ":timeline";
 
     /**
      * 持久化同步范围格式，按地区和语言隔离卡片版本及重试记录。

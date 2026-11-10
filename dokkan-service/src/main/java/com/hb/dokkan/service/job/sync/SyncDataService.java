@@ -140,7 +140,7 @@ public class SyncDataService {
             log.error("KX Wiki failed cardIds={}", context.getFailedCardIds());
             throw new DokkanBizException(ExceptionErrorCode.GET_WIKI_INFO_ERROR);
         }
-        cardStrategy.markVersionComplete(context.getSourceUpdatedAt());
+        cardStrategy.markVersionComplete(context);
     }
 
     /**
